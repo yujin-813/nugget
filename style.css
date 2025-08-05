@@ -1,0 +1,1051 @@
+/* 전체 페이지 레이아웃 설정 */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f4f7f6;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+#data-table-container {
+    margin-bottom: 20px; /* 데이터 테이블과 그래프 사이의 간격 설정 */
+}
+
+#graph-container {
+    max-height: 400px;  /* 그래프 컨테이너 높이 제한 */
+    overflow: hidden;   /* 그래프가 컨테이너를 벗어나지 않게 설정 */
+}
+
+.chart-container {
+    max-height: 400px;
+    overflow: hidden;
+}
+
+
+    .chart-container svg {
+        width: 100%;
+        height: auto;
+    }
+.ai-message, .data-table-container, .chart-container {
+    display: block; /* 각 섹션이 수직으로 나열되도록 설정 */
+    margin-bottom: 20px; /* 각 섹션 사이의 간격 설정 */
+}
+
+.ai-response {
+    display: flex;
+    flex-direction: column; /* 데이터 테이블과 그래프가 수직으로 정렬되도록 설정 */
+}
+
+.add-to-report-btn {
+    position: relative;  /* 또는 fixed, absolute 로 필요에 맞게 설정 */
+    z-index: 10;          /* 다른 요소보다 앞에 나오도록 충분히 높은 값 설정 */
+}
+
+#ai-response {
+    display: flex;
+    flex-direction: column;  /* 세로로 정렬 */
+    gap: 20px;               /* 각 요소 사이의 간격 */
+}
+/* 리포트에 포함된 그래프 영역 */
+.report-graph {
+    width: 100%; /* 부모 컨테이너에 맞춰 가로 크기 설정 */
+    height: 300px; /* 높이는 고정값을 사용하되 필요에 따라 변경 가능 */
+    max-width: 100%; /* 부모 크기 초과 방지 */
+    position: relative; /* 자식 요소인 SVG가 제대로 배치되도록 설정 */
+  }
+  
+  /* 그래프에 적용될 스타일 */
+  .report-graph svg {
+    width: 100%; /* 부모 요소에 맞게 너비를 100%로 설정 */
+    height: 100%; /* 부모 요소에 맞게 높이를 100%로 설정 */
+    display: block; /* 인라인 요소가 아닌 블록 요소로 설정 */
+    object-fit: contain; /* 내용 비율을 유지하며 컨테이너 안에 맞추기 */
+  }
+  
+
+/* 햄버거 메뉴 스타일 */
+.hamburger-menu {
+    font-size: 24px;
+    cursor: pointer;
+    color: #4D8AFF; /* 아이콘 컬러만 유지 */
+    background: none; /* 배경 없이 투명하게 설정 */
+    border: none; /* 기본 테두리 제거 */
+    width: 30px; /* 원의 가로 크기 */
+    height: 30px; /* 원의 세로 크기 */
+    display: flex; /* 내부 요소를 중앙으로 정렬하기 위해 flex 사용 */
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%; /* 클릭 시 원형 배경을 위한 모양 설정 */
+    transition: background-color 0.3s ease; /* 배경색 전환 효과 추가 */
+}
+
+/* 햄버거 메뉴 클릭 및 호버 스타일 */
+.hamburger-menu:active, .hamburger-menu:hover {
+    background-color: rgba(128, 128, 128, 0.2); /* 클릭 시 그레이 배경색 추가 */
+}
+
+
+/* 네비게이션 바 */
+.navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e1e1e1;
+    color: black;
+    font-size: 12px;
+    padding: 5px 15px;
+    z-index: 1000;
+    transition: left 0.3s ease;
+}
+
+/* 네비게이션 항목 */
+.nav-item {
+    color: white;
+}
+
+.nav-item p {
+    margin: 0;
+    font-size: 12px;
+    color: black;
+}
+
+.nav-item button {
+    font-size: 12px;
+    background: transparent;
+    border: none;
+    color: black;
+    cursor: pointer;
+}
+
+.nav-item button:hover {
+    color: #2980b9;
+}
+/* user-info 내 전체 정렬 */
+#user-info {
+    display: flex;
+    align-items: center; /* 아이템을 수직 가운데 정렬 */
+    gap: 10px; /* 각 요소 간의 간격 추가 */
+}
+
+/* user-info 내 아이콘 스타일 */
+.user-info-icon {
+    width: 20px;
+    height: 20px;
+    margin-left:10px;
+}
+/* 로그인 상태 스타일 */
+#login-status {
+    margin: 0; /* 기본 여백 제거 */
+    font-size: 12px; /* 적절한 텍스트 크기 */
+    white-space: nowrap; /* 텍스트가 한 줄에 있도록 설정 */
+}
+.report-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* 설정 간의 간격 */
+    margin-bottom: 20px; /* 리포트 작성 영역과의 간격 */
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 10px;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 로그인 버튼 스타일 */
+#login-btn {
+    font-size: 12px;
+    
+    background-color: #4D8AFF; /* 버튼 배경색 */
+    color: white; /* 버튼 텍스트 색상 */
+    border: none;
+    border-radius: 5px; /* 버튼 모서리 둥글게 */
+    cursor: pointer;
+    transition: background-color 0.3s ease; /* 배경색 전환 효과 */
+}
+
+#login-btn:hover {
+    background-color: #0056b3; /* 호버 시 배경색 변경 */
+}
+/* 팝업 기본 스타일 */
+.modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%; /* 화면 너비의 80% */
+    max-width: 800px; /* 최대 너비 */
+    max-height: 90%; /* 화면 높이의 90% */
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1001;
+    padding: 20px;
+    overflow: auto; /* 스크롤 가능하도록 설정 */
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+}
+.modal table {
+    width: 100%; /* 테이블이 팝업 너비에 맞도록 설정 */
+    border-collapse: collapse;
+}
+
+.modal table th,
+.modal table td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.modal table th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.modal-backdrop.visible {
+    display: block;
+}
+
+.close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.hidden {
+    display: none;
+}
+#data-table table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+#data-table th, #data-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+#data-table th {
+    background-color: #f4f4f4;
+    text-align: left;
+}
+
+/* 배경 흐림 효과 */
+.modal-backdrop {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-backdrop.visible {
+    display: block;
+}
+
+/* 사이드바 */
+.sidebar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    width: 74px;
+    height: calc(100% - 64px);
+    transition: width 0.3s ease;
+    background-color: #ffffff;
+    border-right: 1px solid #e1e1e1;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    z-index: 999;
+}
+
+.sidebar.expanded {
+    width: 174px;
+}
+
+/* 공통된 사이드바 버튼 스타일 */
+.sidebar-button {
+    display: flex;
+    
+    gap: 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 15px;
+    font-size: 12px;
+    color: black;
+    width: 100%;
+    text-align: left;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    justify-content: start; /* 왼쪽 정렬 */
+}
+
+.sidebar-button:hover {
+    background-color: #f0f0f0;
+    border-radius: 8px;
+}
+
+
+.sidebar-header,
+.sidebar-content,
+.sidebar-footer {
+    padding: 20px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sidebar-content {
+    flex-direction: column;
+    gap: 10px; /* 메뉴 간 간격을 동일하게 설정 */
+    padding: 20px 0; /* 상하 패딩을 설정하여 아이템 간 간격 유지 */
+    align-items: center; /* 아이템 중앙 정렬 */
+}
+
+.sidebar-footer {
+    position: absolute;
+    bottom: 10px;
+    font-size: 12px;
+    border-top: 1px solid #e1e1e1;
+}
+
+
+/* 메뉴 아이콘과 텍스트 */
+.menu-icon {
+    width: 24px; /* 아이콘 크기 조정 */
+    height: 24px;
+    transition: transform 0.3s ease;
+}
+
+.menu-text {
+    display: inline-block;
+    transition: opacity 0.3s ease, width 0.3s ease;
+    white-space: nowrap;
+    padding-top:6px;
+    font-size:12px;
+}
+
+/* 사이드바가 닫혔을 때 아이콘 정렬 및 텍스트 숨김 */
+.sidebar.closed .menu-text {
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+    margin-left: -999px;
+}
+
+.sidebar.closed .sidebar-button {
+    justify-content: center; /* 사이드바가 닫혔을 때 아이콘을 중앙에 위치 */
+}
+
+.sidebar.closed .menu-icon {
+    margin: 0 auto;
+    position:fixed;
+}
+.sidebar.closed .saved-report-item{
+    opacity:0;
+}
+.saved-report-item{
+    background-color:#fff;
+    border:solid 0;
+    text-align:left;
+    position:left;
+    width:80px;
+    height:30px;
+}
+
+/* 아이콘 확대 효과 (사이드바 닫혔을 때) */
+.sidebar.closed .sidebar-button:hover .menu-icon {
+    transform: scale(1.2);
+}
+/* 아이콘 및 텍스트 */
+.button-icon {
+    width: 32px; /* 아이콘 크기를 고정하여 일관성 부여 */
+    height: 32px;
+    transition: transform 0.3s ease;
+}
+
+.button-text {
+    display: inline-block;
+    transition: opacity 0.3s ease, width 0.3s ease;
+    white-space: nowrap; /* 텍스트가 줄바꿈되지 않도록 설정 */
+}
+
+
+
+/* 메뉴 간격 및 정렬 */
+.sidebar-header,
+.sidebar-content,
+.sidebar-footer {
+    padding: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 사이드바 타이틀 (일반 텍스트) */
+.sidebar-footer {
+    position: absolute;
+    bottom: 10px;
+    font-size: 12px;
+    border-top: 1px solid #e1e1e1;
+    width: 100%;
+    text-align: center;
+}
+
+
+/* 사이드바 타이틀 */
+.sidebar-title {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* 아이콘과 텍스트 간의 간격 조정 */
+    padding: 10px 15px;
+    cursor: pointer;
+    transition: background-color 0.3s, border-radius 0.3s;
+}
+
+.sidebar-title:hover {
+    background-color: #f0f0f0;
+    border-radius: 8px;
+}
+
+.content-icon {
+    width: 24px; /* 아이콘 크기 통일 */
+    height: 24px;
+}
+
+.content-text {
+    display: inline-block;
+    transition: opacity 0.3s ease, width 0.3s ease;
+    white-space: nowrap;
+}
+
+.sidebar.closed .content-text {
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+    margin-left: -999px; /* 텍스트를 보이지 않게 함 */
+}
+
+/* 전체 레이아웃 */
+.main-layout {
+    display: flex;
+    height: calc(100vh - 64px);
+    margin-top: 64px;
+    width: 100%;
+    padding: 20px; /* 전체적으로 여유 공간 추가 */
+    box-sizing: border-box;
+    gap: 20px; /* 두 레이아웃 간의 간격을 추가 */
+}
+
+
+/* 왼쪽 레이아웃 */
+.left-layout {
+    flex: 0 0 65%; /* left-layout의 고정 크기 설정 */
+    max-width: 65%; /* 최대 너비를 65%로 설정해 화면 비율 유지 */
+    position: relative;
+    display: flex;
+    transition: width 0.3s ease, left 0.3s ease;
+    padding: 0 10px 0 64px; /* 내부 여백을 추가해 내부 콘텐츠가 겹치지 않도록 함 */
+    background-color: #f4f7f6; /* 배경색 추가 */
+   
+}
+
+/* 부모 요소에 position 설정 */
+.content-wrapper{
+    display: flex;
+    justify-content: flex-start; /* 왼쪽으로 정렬 */
+    width: 100%;
+    
+}
+
+/* 자식 요소에 position 설정 */
+.left-layout.expanded {
+    flex-grow: 1; /* 부모 요소의 남은 공간을 차지하게 설정 */
+    width: calc(65% - 200px);
+    margin-left: 110px; /* 왼쪽으로 110px 여백 */
+}
+
+
+.report-button {
+    padding: 10px 20px;
+    background-color: #007BFF;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.report-button:hover {
+    background-color: #0056b3;
+}
+
+/* 리포트 패널 (왼쪽) */
+.report-panel {
+    flex-grow: 1;
+    background-color: #f4f7f6;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding-top: 10px;
+}
+
+.report-panel-header {
+    padding: 10px;
+    background-color: #fff;
+}
+
+/* 리포트 에디터 */
+.report-editor {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 상단 타이틀 영역 스타일 */
+#report-title {
+    width: 100%;
+    height: 52px;
+    padding: 10px;
+    font-size: 18px;
+    border: 1px solid #d3d3d3; /* 그레이 테두리 */
+    border-radius: 5px;
+    margin-bottom: 20px; /* 아래 박스와의 간격 */
+    box-sizing: border-box;
+}
+/* 날짜 선택 박스 스타일 */
+.report-dates {
+    width: 100%;
+    height: 52px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    border: 1px solid #d3d3d3; /* 그레이 테두리 */
+    border-radius: 5px;
+    margin-bottom: 20px; /* 아래 박스와의 간격 */
+    box-sizing: border-box;
+    font-size:14px;
+}
+
+.report-dates label {
+    font-size: 14px;
+    margin-right: 10px;
+    margin-left:10px;
+}
+
+.report-dates input[type="date"] {
+    padding: 5px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+/* 리포트 내용 영역 스타일 */
+#report-contents {
+    display: flex;
+    flex-wrap: wrap; /* 카드들이 한 줄에 두 개씩 배치될 수 있도록 설정 */
+    justify-content: space-between; /* 카드들 간에 여백을 균등하게 분배 */
+}
+
+.placeholder-text {
+    color: #aaa;
+    font-style: italic;
+}
+
+/* 리포트 액션 버튼 */
+.report-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.report-button {
+    padding: 8px 15px;
+    font-size: 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.report-button:hover {
+    background-color: #e0e0e0;
+}
+
+.delete-button {
+    background-color: #f44336;
+    color: white;
+}
+
+.delete-button:hover {
+    background-color: #d32f2f;
+}
+
+/* 질문 및 응답 영역 (오른쪽) */
+.floating-question {
+    flex: 1; /* 나머지 공간을 차지하도록 설정 */
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    max-height: calc(100vh - 100px); /* 리포트와 겹치지 않도록 max-height 조정 */
+    overflow-y: auto;
+    border-radius: 10px;
+    box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1; /* 레이어 순서 조정 (다른 요소보다 위로 보이도록 설정) */
+}
+
+/* 인공지능 인사말 섹션 */
+.lugget-ai-intro {
+    display: flex;
+    align-items: center; /* 인사말이 다른 메시지와 동일하게 보이도록 정렬 */
+    gap: 15px; /* 이미지와 메시지 간 간격 설정 */
+    padding: 10px 15px; /* 내부 여백 설정 */
+    background-color: #f1f0f0; /* 다른 메시지와 동일한 배경 */
+    border-radius: 15px;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.1);
+    max-width: 80%; /* 다른 메시지와 동일한 너비 제한 */
+}
+
+.ai-character {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid #007BFF;
+}
+
+.ai-intro-message-bubble {
+    padding: 10px;
+    background: none; /* 기존 배경 제거, 부모에서 이미 설정됨 */
+    box-shadow: none; /* 그림자도 부모에서 처리되므로 제거 */
+    max-width: calc(100% - 60px); /* 캐릭터 이미지를 제외한 너비 제한 */
+}
+
+.ai-intro-message-bubble p {
+    margin: 0;
+    font-size: 12px;
+    color: #333;
+    line-height: 1.5;
+}
+/* AI 응답 컨테이너 설정 */
+.ai-response-container {
+    display: flex;
+    flex-direction:column;
+    gap: 20px;
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+#report-contents .ai-response-container{display: flex;
+    flex-direction: row-reverse;}
+/* 일반 응답과 전략적 조언을 같은 행으로 배치 */
+.ai-response-row {
+    display: flex;
+    gap: 20px;
+}
+
+/* 각 응답 카드 설정 */
+.ai-response-card {
+    flex: 1;  /* 두 카드가 동일한 크기로 나누어짐 */
+    padding: 20px;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/*리포트 내에서의 디자인*/
+
+/* 각 카드의 스타일 설정 */
+#report-contents .ai-analysis-card,
+#report-contents .ai-strategic-card {
+    width: 45%; /* 카드의 크기를 45%로 설정 */
+    margin-bottom: 20px; /* 카드들 간의 간격 설정 */
+    box-sizing: border-box; /* 패딩과 마진을 포함한 크기 조정 */
+    display: inline-block;
+}
+/* 카드 내부 내용 스타일 설정 (타이틀, 응답 등) */
+#report-contents .ai-analysis-card .report-section,
+#report-contents .ai-strategic-card .report-section {
+    padding: 15px;
+    background-color: #fff;  /* 카드 배경색 */
+    border: 1px solid #ccc;  /* 카드 테두리 */
+    border-radius: 8px;  /* 카드 테두리 둥글게 */
+    margin-bottom: 10px;
+}
+/* 질문, 응답을 나누는 스타일 */
+#report-contents .ai-analysis-card .report-section strong,
+#report-contents .ai-strategic-card .report-section strong {
+    font-size: 16px;
+    color: #333;  /* 제목 색상 */
+}
+
+/* 차트 영역 스타일 */
+#report-contents .ai-analysis-card .chart-container,
+#report-contents .ai-strategic-card .chart-container {
+    width: 100%;  /* 차트 영역이 카드 전체 너비를 차지하도록 설정 */
+    max-height: 300px; /* 차트의 최대 높이 설정 */
+    margin-bottom: 15px; /* 차트와 텍스트 간의 여백 */
+    position: relative;
+}
+
+/* 응답 카드 구분을 위한 색상 설정 */
+.ai-analysis-card {
+    border-left: 4px solid #4D8AFF;
+}
+
+.ai-strategic-card {
+    border-left: 4px solid #FFA500;
+}
+
+.ai-response-card h4 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.ai-response-card p {
+    line-height: 1.5;
+    font-weight: 400;
+}
+
+/* 차트 컨테이너 설정 */
+.ai-response-chart {
+    width: 100%;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+/* 일반 분석 결과 영역 스타일 */
+.ai-general-analysis {
+    margin-bottom: 20px;
+}
+
+/* 전략적 조언 영역 스타일 */
+.ai-strategic-advice {
+    background-color: #fffbec;
+    padding: 10px;
+    border-left: 4px solid #ffc107;
+    border-radius: 5px;
+}
+
+/* 질문창의 입력 필드 */
+.floating-question-input {
+    display: flex;
+    margin-top: 10px;
+    gap: 10px;
+}
+
+#user-question {
+    flex: 1;
+    font-size: 16px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    resize: none;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+#submit-question {
+    font-size: 16px;
+    background-color: #007BFF;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease;
+}
+
+#submit-question:hover {
+    background-color: #0056b3;
+}
+
+/* 채팅 메시지 스타일 */
+.chat-container {
+    flex: 1;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+.chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.message-bubble {
+    display: inline-block;
+    padding: 10px 15px;
+    border-radius: 15px;
+    max-width: 80%;
+    line-height: 1.5;
+    font-size: 12px;
+    margin-bottom: 10px;
+    word-wrap: break-word;
+}
+
+.user-message {
+    align-self: flex-end;
+    background-color: #007BFF;
+    color: #fff;
+    border-bottom-right-radius: 0;
+}
+
+.ai-message {
+    align-self: flex-start;
+    background-color: #f1f0f0;
+    color: #333;
+    border-bottom-left-radius: 0;
+}
+/* 스코어 카드 공통 스타일 */
+.card, .achievement-rate {
+    padding: 15px;
+    margin: 8px 0; /* 카드 간격 줄이기 */
+    border: 1px solid #ddd;  /* stroke 적용 */
+    border-radius: 8px;
+    background-color: #ffffff;
+    box-shadow: none;  /* Drop-shadow 제거 */
+    height: 70px;  /* 고정 높이 */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* KPI 카드의 한 줄에 나열되도록 스타일 */
+.kpi-card {
+    padding: 8px 10px;
+    margin-right: 10px;  /* 카드 간의 간격 */
+    flex-grow: 1;  /* 카드가 비율로 크기 조절되도록 */
+    max-width: calc(33.33% - 10px); /* 한 줄에 3개 카드가 나열될 수 있도록 (간격 제외) */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    box-sizing: border-box;
+    font-size: 14px;  /* 글자 크기 설정 (value보다 작은 글자) */
+    height:100px;
+}
+
+/* KPI 카드의 텍스트 스타일 */
+.kpi-label, .kpi-value, .kpi-sub-label {
+    font-weight: normal; /* 볼드 없이 */
+}
+
+/* KPI 카드에서 값 텍스트 (value) 스타일 */
+.kpi-value {
+    font-size: 16px;  /* Value는 글자 크기를 더 크게 */
+    font-weight: bold;  /* 중요한 값은 볼드 처리 */
+}
+
+/* 전체 카드 컨테이너 스타일 */
+.kpi-card-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;  /* 각 카드 간 간격 */
+    justify-content: space-between;  /* 카드 간에 균등한 간격 배치 */
+}
+/* KPI 카드 콘텐츠 스타일 */
+.kpi-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px; /* 텍스트 간격 줄이기 */
+}
+
+/* KPI 레이블 스타일 */
+.kpi-label {
+
+    color: #333;
+    font-size: 1.1em; /* 폰트 크기 일관성 맞추기 */
+}
+
+
+
+/* KPI 하위 레이블 스타일 */
+.kpi-sub-label {
+    font-size: 0.9em;
+    color: #777;
+}
+
+.visualization-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.visualization-card {
+    width: calc(50% - 20px);
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    background-color: #ffffff;
+}
+
+.chart-title {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.visualization {
+    position: relative;
+    width: 100%;
+    height: 300px;
+}
+
+svg {
+    width: 100%;
+    height: 100%;
+}
+
+path:hover {
+    opacity: 0.8;
+}
+
+circle {
+    cursor: pointer;
+}
+
+circle:hover {
+    fill: #FF6347;
+}
+
+
+/* 목표 달성률 영역 스타일 */
+.achievement-rate {
+    font-size: 1em; /* 폰트 크기 통일 */
+    font-weight: bold;
+    color: #4CAF50; /* 달성률을 강조하는 색상 (예: 초록색) */
+    margin-top: 10px; /* 상단 여백 추가 */
+}
+
+/* 카드 테두리와 배경 강조 */
+.kpi-card, .achievement-rate {
+    border: 1px solid #ccc;  /* 카드를 감싸는 테두리 강조 */
+    border-radius: 8px;
+    background-color: #ffffff;  /* 배경은 하얀색 */
+}
+
+/* 이벤트 선택 영역 */
+.goal-section {
+    padding: 15px;
+    margin: 10px 0;
+    background-color: #ccd2f3;  /* 배경색을 조금 다르게 */
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    width:50%;
+    font-size:14px;
+}
+
+/* 목표 저장 버튼 스타일 */
+.save-goal-btn {
+    background-color: #4CAF50; /* 버튼 배경색 */
+    color: white;  /* 버튼 텍스트 색상 */
+    border: none;  /* 테두리 제거 */
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-top: 10px;
+}
+
+.save-goal-btn:hover {
+    background-color: #45a049;  /* 버튼에 마우스를 올렸을 때 색상 변화 */
+}
+
+.goal-input-wrapper {
+    margin-top: 10px;
+}
+
+/* Select box 스타일 */
+.event-select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    font-size: 1em;
+    margin-bottom: 10px;
+}
+
+
+
+
+
+
+.recommendation-panel {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.recommendations-container {
+    margin-bottom: 10px;
+}
+
+.simulation-results {
+    margin-top: 15px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #fff;
+}
+
+.simulation-results h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.simulation-results p {
+    margin: 5px 0;
+}
