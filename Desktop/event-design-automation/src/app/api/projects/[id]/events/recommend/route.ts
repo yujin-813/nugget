@@ -308,10 +308,11 @@ function buildParameterTemplates(
 
 function enrichDraftsWithCodesAndTemplates(
   drafts: EventDraft[],
-  pagePath: string
+  pagePath: string,
+  startIndex = 0
 ): EventDraft[] {
   return drafts.map((draft, index) => {
-    const eventCode = buildEventCode(index);
+    const eventCode = buildEventCode(startIndex + index);
     return {
       ...draft,
       eventCode,
@@ -1041,7 +1042,7 @@ export async function POST(
 ) {
   try {
     const body = await request.json().catch(() => ({} as { mode?: string }));
-    const mode = body?.mode === "replace" ? "replace" : "supplement";
+    const mode = body?.mode === "supplement" ? "supplement" : "replace";
 
     const params = await context.params;
     const { id } = params;
@@ -1148,7 +1149,11 @@ export async function POST(
 
       const ga4Templates = buildToolTemplates(toolType, step2, step3);
       const draftedEvents = designEvents(project.id, page.id, page.title || "main", toolType, step2, step4, ga4Templates);
-      const eventsForPage = enrichDraftsWithCodesAndTemplates(draftedEvents, step1.urlPath);
+      const eventsForPage = enrichDraftsWithCodesAndTemplates(
+        draftedEvents,
+        step1.urlPath,
+        eventsToCreate.length
+      );
       eventsToCreate.push(...eventsForPage);
 
       perPagePipeline.push({
