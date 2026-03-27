@@ -5,6 +5,7 @@ module.exports = {
       cwd: '/srv/eve-event-app/current',
       script: 'npm',
       args: 'start',
+      env_file: '/srv/eve-event-app/.env.eve',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
