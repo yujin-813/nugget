@@ -78,6 +78,7 @@ type EventDraft = {
   status: "draft";
   sourceType: "ai" | "ga4_recommended" | "custom_ai";
   parameterTemplates?: EventParamTemplate[];
+  contextParams?: EventParamTemplate[];
 };
 
 type Ga4Template = {
@@ -135,29 +136,62 @@ function slugify(input: string, fallback: string) {
 
 const EVENT_NAME_MAX = 32;
 
-function compactIndex(index: number) {
-  return String(index + 1).padStart(2, "0");
+function hasKeyword(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
 }
 
-function buildCustomEventName(interaction: InteractionItem, index: number) {
-  const labelSlug = slugify(interaction.label || "", "item");
-  const idx = compactIndex(index);
+function isCtaLabel(label: string) {
+  return hasKeyword(label, [
+    "cta",
+    "start",
+    "signup",
+    "sign_up",
+    "sign-up",
+    "join",
+    "trial",
+    "buy",
+    "purchase",
+    "contact",
+    "lead",
+    "apply",
+    "신청",
+    "문의",
+    "가입",
+    "시작",
+    "체험",
+    "도입",
+    "구매",
+    "결제",
+    "상담",
+  ]);
+}
+
+function inferSemanticEventName(interaction: InteractionItem) {
+  const label = (interaction.label || "").toLowerCase();
+  const isFilter = hasKeyword(label, ["filter", "facet", "필터"]);
+  const isOption = hasKeyword(label, ["option", "select", "dropdown", "checkbox", "라디오", "옵션", "선택"]);
+  const isPopup = hasKeyword(label, ["popup", "banner", "promo", "promotion", "팝업", "배너", "프로모션"]);
+  const isDismiss = hasKeyword(label, ["close", "dismiss", "skip", "닫기", "건너뛰기"]);
+  const isLead = hasKeyword(label, ["contact", "lead", "request", "demo", "문의", "상담", "도입", "신청"]);
 
   switch (interaction.actionType) {
-    case "navigate":
-      return `nav_click_${labelSlug}_${idx}`;
-    case "open_modal":
-      return `modal_open_${labelSlug}_${idx}`;
-    case "open_dropdown":
-      return `dropdown_open_${labelSlug}_${idx}`;
-    case "open_popup":
-      return `popup_open_${labelSlug}_${idx}`;
     case "download":
-      return `file_download_${labelSlug}_${idx}`;
+      return "file_download";
     case "form_submit":
-      return `form_submit_${labelSlug}_${idx}`;
+      return isLead ? "generate_lead" : "submit_form";
+    case "navigate":
+      return isCtaLabel(label) ? "click_cta" : "select_content";
+    case "open_dropdown":
+      return isFilter ? "toggle_filter" : "select_option";
+    case "open_modal":
+      return isCtaLabel(label) ? "click_cta" : "select_content";
+    case "open_popup":
+      if (isDismiss) return "dismiss_promotion";
+      return isPopup ? "select_promotion" : "view_promotion";
     default:
-      return `ui_action_${labelSlug}_${idx}`;
+      if (isFilter) return "toggle_filter";
+      if (isOption) return "select_option";
+      return isCtaLabel(label) ? "click_cta" : "select_content";
   }
 }
 
@@ -256,6 +290,10 @@ function buildParameterTemplates(
         isRequired: true,
       }
     );
+  }
+
+  if (draft.contextParams?.length) {
+    templates.push(...draft.contextParams);
   }
 
   const deduped = new Map<string, EventParamTemplate>();
@@ -823,21 +861,142 @@ function designEvents(
       });
     });
 
-  step2.interactions.slice(0, 30).forEach((interaction, index) => {
-    const label = interaction.label || "interaction";
+  const groupedBySemanticName = new Map<
+    string,
+    {
+      eventName: string;
+      labels: string[];
+      destinations: string[];
+      actionTypes: string[];
+      count: number;
+    }
+  >();
+
+  step2.interactions.slice(0, 40).forEach((interaction) => {
+    const eventName = inferSemanticEventName(interaction).slice(0, EVENT_NAME_MAX);
+    const existing =
+      groupedBySemanticName.get(eventName) ||
+      { eventName, labels: [], destinations: [], actionTypes: [], count: 0 };
+
+    if (interaction.label && !existing.labels.includes(interaction.label)) {
+      existing.labels.push(interaction.label);
+    }
+    if (interaction.destination && !existing.destinations.includes(interaction.destination)) {
+      existing.destinations.push(interaction.destination);
+    }
+    if (!existing.actionTypes.includes(interaction.actionType)) {
+      existing.actionTypes.push(interaction.actionType);
+    }
+    existing.count += 1;
+
+    groupedBySemanticName.set(eventName, existing);
+  });
+
+  const isHighPriorityName = (name: string) =>
+    ["generate_lead", "purchase", "begin_checkout", "sign_up", "login", "submit_form", "click_cta"].includes(name);
+
+  const buildContextParams = (
+    eventName: string,
+    labels: string[],
+    destinations: string[],
+    count: number
+  ): EventParamTemplate[] => {
+    const firstLabel = labels[0] || "cta_button";
+    const params: EventParamTemplate[] = [
+      {
+        propertyName: "item_id",
+        propertyType: "string",
+        exampleValue: slugify(firstLabel, "item"),
+        isRequired: false,
+      },
+      {
+        propertyName: "item_name",
+        propertyType: "string",
+        exampleValue: firstLabel,
+        isRequired: false,
+      },
+      {
+        propertyName: "slot_index",
+        propertyType: "number",
+        exampleValue: "1",
+        isRequired: false,
+      },
+      {
+        propertyName: "list_name",
+        propertyType: "string",
+        exampleValue: slugify(pageTitle || "main", "main"),
+        isRequired: false,
+      },
+      {
+        propertyName: "sample_count",
+        propertyType: "number",
+        exampleValue: String(count),
+        isRequired: false,
+      },
+    ];
+
+    if (destinations.length > 0 || eventName === "select_content") {
+      params.push({
+        propertyName: "destination_url",
+        propertyType: "string",
+        exampleValue: destinations[0] || "https://example.com/next",
+        isRequired: false,
+      });
+    }
+
+    if (eventName === "toggle_filter" || eventName === "select_option") {
+      params.push({
+        propertyName: "option_name",
+        propertyType: "string",
+        exampleValue: firstLabel,
+        isRequired: false,
+      });
+    }
+
+    if (["view_promotion", "select_promotion", "dismiss_promotion"].includes(eventName)) {
+      params.push(
+        {
+          propertyName: "popup_id",
+          propertyType: "string",
+          exampleValue: slugify(firstLabel, "popup"),
+          isRequired: false,
+        },
+        {
+          propertyName: "popup_type",
+          propertyType: "string",
+          exampleValue: "modal",
+          isRequired: false,
+        },
+        {
+          propertyName: "placement",
+          propertyType: "string",
+          exampleValue: "hero",
+          isRequired: false,
+        }
+      );
+    }
+
+    return params;
+  };
+
+  groupedBySemanticName.forEach((group) => {
+    const triggerType =
+      group.actionTypes[0] ||
+      (group.eventName === "file_download" ? "download" : group.eventName === "submit_form" ? "form_submit" : "trigger_ui");
 
     drafts.push({
       projectId,
       pageId,
-      eventName: buildCustomEventName(interaction, index).slice(0, EVENT_NAME_MAX),
-      description: `${label} -> ${interaction.actionType}`,
-      triggerType: interaction.actionType,
-      triggerCondition: interaction.destination
-        ? `User triggers '${label}' and moves to '${interaction.destination}'`
-        : `User triggers '${label}' (${interaction.actionType})`,
-      priority: interaction.actionType === "form_submit" || interaction.actionType === "download" ? "HIGH" : "MEDIUM",
+      eventName: group.eventName,
+      description: `${group.eventName} derived from ${group.count} interaction(s)`,
+      triggerType,
+      triggerCondition: group.destinations.length
+        ? `Users interact with ${group.labels.slice(0, 3).join(", ")} and may move to ${group.destinations.slice(0, 2).join(", ")}`
+        : `Users interact with ${group.labels.slice(0, 3).join(", ")} (${group.actionTypes.join(", ")})`,
+      priority: isHighPriorityName(group.eventName) ? "HIGH" : "MEDIUM",
       status: "draft",
       sourceType: "custom_ai",
+      contextParams: buildContextParams(group.eventName, group.labels, group.destinations, group.count),
     });
   });
 
