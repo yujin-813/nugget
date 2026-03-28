@@ -22,6 +22,7 @@ type CrawledPage = {
 
 const MAX_ANALYZE_PAGES = 8;
 const MAX_DISCOVER_LINKS_PER_PAGE = 40;
+const MAX_INTERACTIVE_CLICKS_PER_PAGE = 10;
 
 function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, " ").trim();
@@ -116,6 +117,75 @@ async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, orig
   } catch {
     return [];
   }
+}
+
+async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin: string) {
+  const discovered = new Set<string>();
+  try {
+    const selectors = await page.evaluate((maxClicks) => {
+      const isVisible = (el: Element) => {
+        const rect = (el as HTMLElement).getBoundingClientRect?.();
+        if (!rect) return false;
+        if (rect.width < 8 || rect.height < 8) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+      };
+
+      const score = (el: Element) => {
+        const text = `${(el.textContent || "").trim()} ${(el.getAttribute("aria-label") || "")}`.toLowerCase();
+        const classId = `${el.className || ""} ${el.id || ""}`.toLowerCase();
+        let s = 0;
+        if (text.length > 0) s += 1;
+        if (/menu|nav|gnb|header|서비스|소개|문의|가입|시작|플랜|요금|about|contact|pricing|login|sign/.test(text)) s += 3;
+        if (/menu|nav|gnb|header/.test(classId)) s += 2;
+        return s;
+      };
+
+      const candidates = Array.from(
+        document.querySelectorAll("a, button, [role='button'], [onclick], [data-href], [data-url]")
+      )
+        .filter(isVisible)
+        .map((el, index) => {
+          (el as HTMLElement).setAttribute("data-crawl-idx", String(index));
+          return { selector: `[data-crawl-idx="${index}"]`, score: score(el) };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, maxClicks * 2);
+
+      const dedup = new Set<string>();
+      const result: string[] = [];
+      for (const candidate of candidates) {
+        if (!dedup.has(candidate.selector)) {
+          dedup.add(candidate.selector);
+          result.push(candidate.selector);
+        }
+        if (result.length >= maxClicks) break;
+      }
+      return result;
+    }, MAX_INTERACTIVE_CLICKS_PER_PAGE);
+
+    for (const selector of selectors) {
+      const beforeUrl = page.url();
+      const maybeNav = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 1200 }).catch(() => null);
+      await page.click(selector).catch(() => null);
+      await Promise.race([maybeNav, new Promise((resolve) => setTimeout(resolve, 900))]);
+      const afterUrl = page.url();
+
+      const normalized = toSameOriginUrl(afterUrl, beforeUrl, origin);
+      if (normalized && normalized !== pageUrl) {
+        discovered.add(normalized);
+      }
+
+      if (afterUrl !== beforeUrl) {
+        await page.goBack({ waitUntil: "domcontentloaded", timeout: 2000 }).catch(() => null);
+        await neutralizeBlockingPopups(page);
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  return Array.from(discovered).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
 
 function parseUrlStructure(rawUrl: string) {
@@ -403,7 +473,8 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
       const title = safeText($("title").text(), nextUrl);
       const staticLinks = extractInternalLinks($, nextUrl, origin);
       const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin);
-      const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks])).slice(
+      const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin);
+      const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks, ...interactiveLinks])).slice(
         0,
         MAX_DISCOVER_LINKS_PER_PAGE
       );
