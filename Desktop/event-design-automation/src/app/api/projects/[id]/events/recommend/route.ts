@@ -1063,6 +1063,10 @@ export async function POST(
     const toolType = project.toolType || "ga4";
     const sitemapOverride = parseJson<SitemapOverride | null>(project.sitemapOverrideJson, null);
     const overrideEdgesByFromPage = new Map<string, string[]>();
+    const overrideNodeById = new Map<string, { id: string; url: string; title: string }>();
+    sitemapOverride?.nodes?.forEach((node) => {
+      if (node?.id && node?.url) overrideNodeById.set(node.id, node);
+    });
     if (sitemapOverride?.edges?.length) {
       sitemapOverride.edges.forEach((edge) => {
         const list = overrideEdgesByFromPage.get(edge.fromPageId) || [];
@@ -1106,11 +1110,14 @@ export async function POST(
       const syntheticNavigateInteractions: InteractionItem[] = [];
       overrideTargets.forEach((toPageId, edgeIndex) => {
           const targetPage = pagesForDesign.find((candidate) => candidate.id === toPageId);
-          if (!targetPage) return;
+          const targetNode = overrideNodeById.get(toPageId);
+          const destinationUrl = targetPage?.url || targetNode?.url;
+          if (!destinationUrl) return;
+          const targetLabel = targetPage?.title || targetNode?.title || "page";
           syntheticNavigateInteractions.push({
-            label: `sitemap_to_${slugify(targetPage.title || "page", `p${edgeIndex + 1}`)}`,
+            label: `sitemap_to_${slugify(targetLabel, `p${edgeIndex + 1}`)}`,
             actionType: "navigate",
-            destination: targetPage.url,
+            destination: destinationUrl,
             confidence: "high" as const,
           });
         });

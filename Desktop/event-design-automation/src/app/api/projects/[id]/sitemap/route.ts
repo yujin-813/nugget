@@ -17,6 +17,32 @@ type SitemapPayload = {
   edges: SitemapEdge[];
 };
 
+function normalizeNodeId(rawId: string, fallbackSeed: string) {
+  const normalized = (rawId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (normalized.length > 0) return normalized;
+  const seed = fallbackSeed
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 24);
+  return `custom_${seed || Date.now().toString()}`;
+}
+
+function normalizeUrl(input: string) {
+  const trimmed = (input || "").trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 function parseJson<T>(json: string | null, fallback: T): T {
   if (!json) return fallback;
   try {
@@ -142,19 +168,46 @@ export async function PUT(
     }
 
     const pageById = new Map(project.pages.map((page) => [page.id, page]));
-    const validNodes: SitemapNode[] = project.pages.map((page) => ({
-      id: page.id,
-      url: page.url,
-      title: page.title || "Untitled",
-    }));
+    const validNodesMap = new Map<string, SitemapNode>();
 
-    const inputEdges = Array.isArray(body.edges) ? body.edges : [];
+    project.pages.forEach((page) => {
+      validNodesMap.set(page.id, {
+        id: page.id,
+        url: page.url,
+        title: page.title || "Untitled",
+      });
+    });
+
+    const inputNodes = Array.isArray(body.nodes) ? body.nodes : [];
+    inputNodes.forEach((node, index) => {
+      const rawUrl = node?.url || "";
+      const url = normalizeUrl(rawUrl);
+      if (!url) return;
+      const title = (node?.title || "").trim() || "Untitled";
+      const idSeed = title || `node_${index + 1}`;
+      let id = normalizeNodeId(node?.id || "", idSeed);
+      if (pageById.has(id)) {
+        validNodesMap.set(id, {
+          id,
+          url: pageById.get(id)?.url || url,
+          title: pageById.get(id)?.title || title,
+        });
+      } else {
+        if (!id.startsWith("custom_")) id = `custom_${id}`;
+        validNodesMap.set(id, { id, url, title });
+      }
+    });
+
+    const validNodes: SitemapNode[] = Array.from(validNodesMap.values());
+    const nodeIdSet = new Set(validNodes.map((node) => node.id));
+
     const dedupEdge = new Map<string, SitemapEdge>();
+    const inputEdges = Array.isArray(body.edges) ? body.edges : [];
     inputEdges.forEach((edge) => {
       const fromPageId = edge?.fromPageId;
       const toPageId = edge?.toPageId;
       if (!fromPageId || !toPageId) return;
-      if (!pageById.has(fromPageId) || !pageById.has(toPageId)) return;
+      if (!nodeIdSet.has(fromPageId) || !nodeIdSet.has(toPageId)) return;
       if (fromPageId === toPageId) return;
       const key = `${fromPageId}->${toPageId}`;
       if (!dedupEdge.has(key)) {
@@ -184,4 +237,3 @@ export async function PUT(
     return NextResponse.json({ error: "Failed to save sitemap override" }, { status: 500 });
   }
 }
-

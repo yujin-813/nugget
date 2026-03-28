@@ -6,6 +6,18 @@ function buildFallbackEventCode(eventId: string, index: number) {
   return `EVT_${String(index + 1).padStart(4, "0")}${short ? `_${short}` : ""}`;
 }
 
+function toSafeFilename(projectName: string) {
+  const ascii = (projectName || "project")
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60) || "project";
+  return {
+    ascii: `tracking_plan_${ascii}.csv`,
+    encoded: `tracking_plan_${encodeURIComponent(projectName || "project")}.csv`,
+  };
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -79,10 +91,12 @@ export async function GET(
 
     const csvContent = "\uFEFF" + csvRows.join("\n"); // Add BOM for Excel UTF-8 support
 
+    const filename = toSafeFilename(project.name);
+
     return new NextResponse(csvContent, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="tracking_plan_${project.name}.csv"`,
+        "Content-Disposition": `attachment; filename="${filename.ascii}"; filename*=UTF-8''${filename.encoded}`,
       },
     });
   } catch (error) {

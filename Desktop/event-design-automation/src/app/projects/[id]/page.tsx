@@ -24,6 +24,8 @@ export default function ProjectDetail() {
   const [sitemapSaving, setSitemapSaving] = useState(false);
   const [sitemapMessage, setSitemapMessage] = useState<string | null>(null);
   const [edgeForm, setEdgeForm] = useState({ fromPageId: "", toPageId: "" });
+  const [newNodeForm, setNewNodeForm] = useState({ title: "", url: "" });
+  const [selectedSitemapNodeId, setSelectedSitemapNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProject();
@@ -36,14 +38,19 @@ export default function ProjectDetail() {
         const data = await res.json();
         setProject(data);
         setSelectedPageId((prev) => prev || data?.pages?.[0]?.id || null);
+        setSelectedSitemapNodeId((prev) => prev || data?.pages?.[0]?.id || null);
         const sitemapRes = await fetch(`/api/projects/${id}/sitemap`);
         if (sitemapRes.ok) {
           const sitemapData = await sitemapRes.json();
+          const nodes = Array.isArray(sitemapData?.sitemap?.nodes) ? sitemapData.sitemap.nodes : [];
           setSitemapState({
             source: sitemapData?.source === "override" ? "override" : "auto",
-            nodes: Array.isArray(sitemapData?.sitemap?.nodes) ? sitemapData.sitemap.nodes : [],
+            nodes,
             edges: Array.isArray(sitemapData?.sitemap?.edges) ? sitemapData.sitemap.edges : [],
           });
+          if (!selectedSitemapNodeId && nodes.length > 0) {
+            setSelectedSitemapNodeId(nodes[0].id);
+          }
         }
       }
     } catch (error) {
@@ -135,7 +142,10 @@ export default function ProjectDetail() {
   };
 
   const selectedPage =
-    project?.pages?.find((page: any) => page.id === selectedPageId) || project?.pages?.[0] || null;
+    project?.pages?.find((page: any) => page.id === selectedPageId) ??
+    (selectedSitemapNodeId
+      ? (project?.pages?.find((page: any) => page.id === selectedSitemapNodeId) ?? null)
+      : (project?.pages?.[0] ?? null));
   const selectedComponent =
     selectedPage?.components?.find((comp: any) => comp.id === selectedComponentId) || null;
 
@@ -173,6 +183,42 @@ export default function ProjectDetail() {
     });
   };
 
+  const addSitemapNode = () => {
+    const title = newNodeForm.title.trim();
+    const url = newNodeForm.url.trim();
+    if (!title || !url) return;
+    try {
+      new URL(url);
+    } catch {
+      setSitemapMessage("URL 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    setSitemapMessage(null);
+    const nodeId = `custom_${Date.now()}`;
+    setSitemapState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: [...prev.nodes, { id: nodeId, title, url }],
+      };
+    });
+    setSelectedSitemapNodeId(nodeId);
+    setNewNodeForm({ title: "", url: "" });
+  };
+
+  const removeSitemapNode = (nodeId: string) => {
+    setSitemapState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: prev.nodes.filter((node) => node.id !== nodeId),
+        edges: prev.edges.filter((edge) => edge.fromPageId !== nodeId && edge.toPageId !== nodeId),
+      };
+    });
+    if (selectedSitemapNodeId === nodeId) setSelectedSitemapNodeId(null);
+  };
+
   const saveSitemapOverride = async () => {
     if (!sitemapState) return;
     setSitemapSaving(true);
@@ -181,7 +227,7 @@ export default function ProjectDetail() {
       const res = await fetch(`/api/projects/${id}/sitemap`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ edges: sitemapState.edges }),
+        body: JSON.stringify({ nodes: sitemapState.nodes, edges: sitemapState.edges }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -238,8 +284,15 @@ export default function ProjectDetail() {
     ).values()
   );
 
+  const sitemapNodes: Array<{ id: string; url: string; title: string }> = sitemapState?.nodes?.length
+    ? sitemapState.nodes
+    : (project?.pages || []).map((page: any) => ({ id: page.id, url: page.url, title: page.title || "Untitled" }));
+
+  const selectedSitemapNode =
+    sitemapNodes.find((node: { id: string }) => node.id === selectedSitemapNodeId) || sitemapNodes[0] || null;
+
   const pageDepth = new Map<string, number>();
-  (project?.pages || []).forEach((page: any) => {
+  sitemapNodes.forEach((page: any) => {
     try {
       const parsed = new URL(page.url);
       const depth = parsed.pathname.split("/").filter(Boolean).length;
@@ -250,7 +303,7 @@ export default function ProjectDetail() {
   });
 
   const depthGroups = new Map<number, any[]>();
-  (project?.pages || []).forEach((page: any) => {
+  sitemapNodes.forEach((page: any) => {
     const depth = pageDepth.get(page.id) || 0;
     const group = depthGroups.get(depth) || [];
     group.push(page);
@@ -288,6 +341,11 @@ export default function ProjectDetail() {
 
   if (loading) return <div className="container" style={{padding: '2rem'}}>Loading...</div>;
   if (!project) return <div className="container" style={{padding: '2rem'}}>Project not found.</div>;
+
+  const previewUrl = selectedSitemapNode?.url || selectedPage?.url || project.targetUrl;
+  const selectedPageEvents = selectedPage
+    ? (project?.events || []).filter((event: any) => event.pageId === selectedPage.id)
+    : [];
 
   return (
     <div className="container" style={{ padding: '2rem', maxWidth: '1200px' }}>
@@ -344,11 +402,13 @@ export default function ProjectDetail() {
           </div>
           
           <div style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>대상 웹페이지 라이브 뷰 (iframe)</h3>
+            <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+              선택 노드 라이브 뷰 (iframe)
+            </h3>
             <div
               style={{
                 width: '100%',
-                height: '500px',
+                height: '260px',
                 backgroundColor: '#fff',
                 borderRadius: 'var(--border-radius-md)',
                 overflow: 'hidden',
@@ -357,7 +417,7 @@ export default function ProjectDetail() {
                 position: 'relative'
               }}
             >
-              <iframe src={selectedPage?.url || project.targetUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Preview" sandbox="allow-same-origin allow-scripts allow-forms" />
+              <iframe src={previewUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Preview" sandbox="allow-same-origin allow-scripts allow-forms" />
               {selectedComponent && (
                 <div
                   style={{
@@ -416,8 +476,8 @@ export default function ProjectDetail() {
                     style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
                   >
                     <option value="">from page</option>
-                    {(project.pages || []).map((page: any) => (
-                      <option key={`from-${page.id}`} value={page.id}>{page.title}</option>
+                    {sitemapNodes.map((node: any) => (
+                      <option key={`from-${node.id}`} value={node.id}>{node.title}</option>
                     ))}
                   </select>
                   <select
@@ -426,23 +486,52 @@ export default function ProjectDetail() {
                     style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
                   >
                     <option value="">to page</option>
-                    {(project.pages || []).map((page: any) => (
-                      <option key={`to-${page.id}`} value={page.id}>{page.title}</option>
+                    {sitemapNodes.map((node: any) => (
+                      <option key={`to-${node.id}`} value={node.id}>{node.title}</option>
                     ))}
                   </select>
                   <button className="btn-primary" onClick={addSitemapEdge} style={{ padding: "0.45rem 0.75rem" }}>
                     엣지 추가
                   </button>
                 </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.5rem", alignItems: "center", marginTop: "0.55rem" }}>
+                  <input
+                    value={newNodeForm.title}
+                    onChange={(e) => setNewNodeForm((prev) => ({ ...prev, title: e.target.value }))}
+                    placeholder="새 노드 제목 (예: 인사이트)"
+                    style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
+                  />
+                  <input
+                    value={newNodeForm.url}
+                    onChange={(e) => setNewNodeForm((prev) => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://example.com/insight"
+                    style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
+                  />
+                  <button className="btn-primary" onClick={addSitemapNode} style={{ padding: "0.45rem 0.75rem" }}>
+                    노드 추가
+                  </button>
+                </div>
                 <div style={{ marginTop: "0.7rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
                   {sitemapState?.edges.map((edge, index) => (
                     <div key={`${edge.fromPageId}-${edge.toPageId}-${index}`} style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", padding: "0.35rem 0.55rem", border: "1px solid var(--border-color)", borderRadius: "999px", fontSize: "0.75rem", color: "#fff" }}>
-                      <span>{project.pages.find((p: any) => p.id === edge.fromPageId)?.title || "from"}</span>
+                      <span>{sitemapNodes.find((p: any) => p.id === edge.fromPageId)?.title || "from"}</span>
                       <span style={{ color: "var(--text-secondary)" }}>→</span>
-                      <span>{project.pages.find((p: any) => p.id === edge.toPageId)?.title || "to"}</span>
+                      <span>{sitemapNodes.find((p: any) => p.id === edge.toPageId)?.title || "to"}</span>
                       <button onClick={() => removeSitemapEdge(edge.fromPageId, edge.toPageId)} style={{ marginLeft: "0.2rem", background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontSize: "0.8rem" }}>
                         x
                       </button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: "0.6rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                  {sitemapNodes.map((node: any) => (
+                    <div key={`node-${node.id}`} style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", padding: "0.35rem 0.55rem", border: "1px solid var(--border-color)", borderRadius: "999px", fontSize: "0.75rem", color: "#fff" }}>
+                      <span>{node.title}</span>
+                      {String(node.id).startsWith("custom_") && (
+                        <button onClick={() => removeSitemapNode(node.id)} style={{ marginLeft: "0.2rem", background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontSize: "0.8rem" }}>
+                          x
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -454,54 +543,90 @@ export default function ProjectDetail() {
               </div>
             )}
             {sitemapMessage && <p style={{ margin: "0 0 0.8rem 0", color: "var(--text-secondary)", fontSize: "0.85rem" }}>{sitemapMessage}</p>}
-            {project.pages?.length > 0 ? (
-              <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '10px', background: 'rgba(0,0,0,0.18)' }}>
-                <svg width={Math.max(graphWidth, 900)} height={Math.max(graphHeight, 220)}>
-                  <defs>
-                    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                      <path d="M0,0 L10,4 L0,8 z" fill="rgba(148,163,184,0.9)" />
-                    </marker>
-                  </defs>
+            {sitemapNodes.length > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: "0.9rem" }}>
+                <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '10px', background: 'rgba(0,0,0,0.18)' }}>
+                  <svg width={Math.max(graphWidth, 900)} height={Math.max(graphHeight, 220)}>
+                    <defs>
+                      <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                        <path d="M0,0 L10,4 L0,8 z" fill="rgba(148,163,184,0.9)" />
+                      </marker>
+                    </defs>
 
-                  {uniqueSitemapEdges.map((edge: any, index: number) => {
-                    const from = nodePosition.get(edge.fromPageId);
-                    const to = nodePosition.get(edge.toPageId);
-                    if (!from || !to) return null;
-                    const x1 = from.x + nodeWidth;
-                    const y1 = from.y + nodeHeight / 2;
-                    const x2 = to.x;
-                    const y2 = to.y + nodeHeight / 2;
-                    const bend = Math.max(24, (x2 - x1) / 2);
-                    const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
-                    return <path key={`edge-${index}`} d={d} fill="none" stroke="rgba(148,163,184,0.8)" strokeWidth="1.5" markerEnd="url(#arrow)" />;
-                  })}
+                    {uniqueSitemapEdges.map((edge: any, index: number) => {
+                      const from = nodePosition.get(edge.fromPageId);
+                      const to = nodePosition.get(edge.toPageId);
+                      if (!from || !to) return null;
+                      const x1 = from.x + nodeWidth;
+                      const y1 = from.y + nodeHeight / 2;
+                      const x2 = to.x;
+                      const y2 = to.y + nodeHeight / 2;
+                      const bend = Math.max(24, (x2 - x1) / 2);
+                      const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+                      return <path key={`edge-${index}`} d={d} fill="none" stroke="rgba(148,163,184,0.8)" strokeWidth="1.5" markerEnd="url(#arrow)" />;
+                    })}
 
-                  {(project.pages || []).map((page: any) => {
-                    const pos = nodePosition.get(page.id);
-                    if (!pos) return null;
-                    const isSelected = selectedPage?.id === page.id;
-                    const fill = isSelected ? "rgba(88,166,255,0.26)" : "rgba(255,255,255,0.08)";
-                    const stroke = isSelected ? "rgba(88,166,255,0.9)" : "rgba(148,163,184,0.55)";
-                    const pageTitle = (page.title || "Untitled").slice(0, 22);
-                    return (
-                      <g key={page.id} onClick={() => setSelectedPageId(page.id)} style={{ cursor: "pointer" }}>
-                        <rect x={pos.x} y={pos.y} rx="10" ry="10" width={nodeWidth} height={nodeHeight} fill={fill} stroke={stroke} strokeWidth="1.4" />
-                        <text x={pos.x + 12} y={pos.y + 23} fill="#fff" fontSize="12" fontWeight="600">
-                          {pageTitle}
-                        </text>
-                        <text x={pos.x + 12} y={pos.y + 40} fill="#9ca3af" fontSize="11">
-                          /{(() => {
-                            try {
-                              return new URL(page.url).pathname.replace(/^\//, "") || "";
-                            } catch {
-                              return "";
-                            }
-                          })()}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                    {sitemapNodes.map((page: any) => {
+                      const pos = nodePosition.get(page.id);
+                      if (!pos) return null;
+                      const isSelected = selectedSitemapNode?.id === page.id;
+                      const fill = isSelected ? "rgba(88,166,255,0.26)" : "rgba(255,255,255,0.08)";
+                      const stroke = isSelected ? "rgba(88,166,255,0.9)" : "rgba(148,163,184,0.55)";
+                      const pageTitle = (page.title || "Untitled").slice(0, 22);
+                      return (
+                        <g
+                          key={page.id}
+                          onClick={() => {
+                            setSelectedSitemapNodeId(page.id);
+                            const relatedPage = (project.pages || []).find((p: any) => p.id === page.id);
+                            setSelectedPageId(relatedPage?.id || null);
+                            setSelectedComponentId(null);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <rect x={pos.x} y={pos.y} rx="10" ry="10" width={nodeWidth} height={nodeHeight} fill={fill} stroke={stroke} strokeWidth="1.4" />
+                          <text x={pos.x + 12} y={pos.y + 23} fill="#fff" fontSize="12" fontWeight="600">
+                            {pageTitle}
+                          </text>
+                          <text x={pos.x + 12} y={pos.y + 40} fill="#9ca3af" fontSize="11">
+                            /{(() => {
+                              try {
+                                return new URL(page.url).pathname.replace(/^\//, "") || "";
+                              } catch {
+                                return "";
+                              }
+                            })()}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+                <div className="glass-panel" style={{ padding: "0.65rem", minHeight: "260px" }}>
+                  <div style={{ color: "#fff", fontSize: "0.9rem", marginBottom: "0.45rem" }}>선택 노드</div>
+                  <div style={{ color: "var(--text-secondary)", fontSize: "0.78rem", marginBottom: "0.6rem", wordBreak: "break-all" }}>
+                    {selectedSitemapNode?.title || "none"} · {previewUrl}
+                  </div>
+                  <div style={{ height: "140px", border: "1px solid var(--border-color)", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
+                    <iframe src={previewUrl} style={{ width: "100%", height: "100%", border: "none" }} title="Mini Preview" sandbox="allow-same-origin allow-scripts allow-forms" />
+                  </div>
+                  <div style={{ marginTop: "0.6rem" }}>
+                    <div style={{ color: "#fff", fontSize: "0.85rem", marginBottom: "0.35rem" }}>해당 페이지 이벤트</div>
+                    {selectedPageEvents.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                        {selectedPageEvents.slice(0, 8).map((event: any) => (
+                          <span key={event.id} style={{ fontSize: "0.73rem", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.2rem 0.45rem" }}>
+                            {event.eventName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                        이 노드와 직접 연결된 이벤트가 아직 없습니다.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
               <p style={{ color: 'var(--text-secondary)', margin: 0 }}>페이지 간 내부 이동 링크를 아직 찾지 못했습니다.</p>
@@ -518,6 +643,7 @@ export default function ProjectDetail() {
                       type="button"
                       onClick={() => {
                         setSelectedPageId(page.id);
+                        setSelectedSitemapNodeId(page.id);
                         setSelectedComponentId(null);
                       }}
                       style={{
