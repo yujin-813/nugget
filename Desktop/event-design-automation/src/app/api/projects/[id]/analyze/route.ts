@@ -50,7 +50,25 @@ function normalizeUrlForCrawl(rawUrl: string) {
   }
 }
 
-function toSameOriginUrl(href: string | null | undefined, currentUrl: string, origin: string) {
+function getServiceDomain(hostname: string) {
+  const parts = (hostname || "").toLowerCase().split(".").filter(Boolean);
+  if (parts.length <= 2) return parts.join(".");
+  return parts.slice(-2).join(".");
+}
+
+function isAllowedServiceHost(hostname: string, serviceDomain: string) {
+  const host = (hostname || "").toLowerCase();
+  const domain = (serviceDomain || "").toLowerCase();
+  if (!host || !domain) return false;
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+function toSameOriginUrl(
+  href: string | null | undefined,
+  currentUrl: string,
+  origin: string,
+  serviceDomain: string
+) {
   if (!href) return null;
   const raw = href.trim();
   if (!raw || raw.startsWith("#") || raw.startsWith("javascript:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -59,7 +77,9 @@ function toSameOriginUrl(href: string | null | undefined, currentUrl: string, or
 
   try {
     const absolute = new URL(raw, currentUrl);
-    if (absolute.origin !== origin) return null;
+    const sameOrigin = absolute.origin === origin;
+    const sameService = isAllowedServiceHost(absolute.hostname, serviceDomain);
+    if (!sameOrigin && !sameService) return null;
     absolute.hash = "";
     if (absolute.pathname.length > 1 && absolute.pathname.endsWith("/")) {
       absolute.pathname = absolute.pathname.slice(0, -1);
@@ -70,18 +90,18 @@ function toSameOriginUrl(href: string | null | undefined, currentUrl: string, or
   }
 }
 
-function extractInternalLinks($: cheerio.CheerioAPI, pageUrl: string, origin: string) {
+function extractInternalLinks($: cheerio.CheerioAPI, pageUrl: string, origin: string, serviceDomain: string) {
   const links = new Set<string>();
   $("a[href], area[href], form[action]").each((_, element) => {
     const tag = element.tagName.toLowerCase();
     const raw = tag === "form" ? $(element).attr("action") : $(element).attr("href");
-    const normalized = toSameOriginUrl(raw, pageUrl, origin);
+    const normalized = toSameOriginUrl(raw, pageUrl, origin, serviceDomain);
     if (normalized) links.add(normalized);
   });
   return Array.from(links).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
 
-async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, origin: string) {
+async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, origin: string, serviceDomain: string) {
   try {
     const candidates = await page.evaluate(() => {
       const values = new Set<string>();
@@ -110,7 +130,7 @@ async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, orig
 
     const links = new Set<string>();
     candidates.forEach((candidate) => {
-      const normalized = toSameOriginUrl(candidate, pageUrl, origin);
+      const normalized = toSameOriginUrl(candidate, pageUrl, origin, serviceDomain);
       if (normalized) links.add(normalized);
     });
     return Array.from(links).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
@@ -119,7 +139,7 @@ async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, orig
   }
 }
 
-async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin: string) {
+async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin: string, serviceDomain: string) {
   const discovered = new Set<string>();
   try {
     const selectors = await page.evaluate((maxClicks) => {
@@ -142,9 +162,23 @@ async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin:
       };
 
       const candidates = Array.from(
-        document.querySelectorAll("a, button, [role='button'], [onclick], [data-href], [data-url]")
+        document.querySelectorAll(
+          "a, button, [role='button'], [onclick], [data-href], [data-url], [tabindex], [aria-controls], li, span, div"
+        )
       )
         .filter(isVisible)
+        .filter((el) => {
+          const style = window.getComputedStyle(el);
+          const clickable =
+            el.tagName.toLowerCase() === "a" ||
+            el.tagName.toLowerCase() === "button" ||
+            el.hasAttribute("onclick") ||
+            el.hasAttribute("data-href") ||
+            el.hasAttribute("data-url") ||
+            el.getAttribute("role") === "button" ||
+            style.cursor === "pointer";
+          return clickable;
+        })
         .map((el, index) => {
           (el as HTMLElement).setAttribute("data-crawl-idx", String(index));
           return { selector: `[data-crawl-idx="${index}"]`, score: score(el) };
@@ -166,14 +200,42 @@ async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin:
 
     for (const selector of selectors) {
       const beforeUrl = page.url();
+      const beforeState = await page
+        .evaluate(() => ({
+          url: location.href,
+          title: document.title || "",
+          anchors: document.querySelectorAll("a[href], [data-href], [data-url]").length,
+          textLen: (document.body?.innerText || "").slice(0, 4000).length,
+        }))
+        .catch(() => ({ url: beforeUrl, title: "", anchors: 0, textLen: 0 }));
       const maybeNav = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 1200 }).catch(() => null);
       await page.click(selector).catch(() => null);
-      await Promise.race([maybeNav, new Promise((resolve) => setTimeout(resolve, 900))]);
+      await Promise.race([maybeNav, new Promise((resolve) => setTimeout(resolve, 1200))]);
       const afterUrl = page.url();
 
-      const normalized = toSameOriginUrl(afterUrl, beforeUrl, origin);
+      const normalized = toSameOriginUrl(afterUrl, beforeUrl, origin, serviceDomain);
       if (normalized && normalized !== pageUrl) {
         discovered.add(normalized);
+      }
+
+      // SPA fallback: URL unchanged but DOM changed; collect newly visible links after interaction.
+      const afterState = await page
+        .evaluate(() => ({
+          url: location.href,
+          title: document.title || "",
+          anchors: document.querySelectorAll("a[href], [data-href], [data-url]").length,
+          textLen: (document.body?.innerText || "").slice(0, 4000).length,
+        }))
+        .catch(() => beforeState);
+      const domChanged =
+        afterState.url !== beforeState.url ||
+        afterState.title !== beforeState.title ||
+        afterState.anchors !== beforeState.anchors ||
+        Math.abs(afterState.textLen - beforeState.textLen) > 30;
+
+      if (domChanged) {
+        const afterLinks = await extractInternalLinksFromBrowser(page, page.url(), origin, serviceDomain);
+        afterLinks.forEach((link) => discovered.add(link));
       }
 
       if (afterUrl !== beforeUrl) {
@@ -460,6 +522,7 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
 
   const normalizedTargetUrl = normalizeUrlForCrawl(targetUrl);
   const origin = new URL(normalizedTargetUrl).origin;
+  const serviceDomain = getServiceDomain(new URL(normalizedTargetUrl).hostname);
 
   const browser = await puppeteer.launch({
     headless: true,
@@ -500,9 +563,9 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
         const html = await page.content();
         const $ = cheerio.load(html);
         const title = safeText($("title").text(), nextUrl);
-        const staticLinks = extractInternalLinks($, nextUrl, origin);
-        const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin);
-        const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin);
+        const staticLinks = extractInternalLinks($, nextUrl, origin, serviceDomain);
+        const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin, serviceDomain);
+        const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin, serviceDomain);
         const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks, ...interactiveLinks])).slice(
           0,
           MAX_DISCOVER_LINKS_PER_PAGE
@@ -596,7 +659,9 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
       });
     }
 
-    const topBlock = $("header, main, section, article, footer, nav, main > div").slice(0, 60);
+    const pageDraftStartIndex = drafts.length;
+
+    const topBlock = $("header, main, section, article, footer, nav, main > div, body > div").slice(0, 80);
     topBlock.each((index, el) => {
       const tagName = el.tagName.toLowerCase();
       const className = $(el).attr("class") || "";
@@ -636,8 +701,8 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
       const action = inferInteractionAction($, el);
       const href = $(el).attr("href") || $(el).attr("action") || null;
       const resolvedDestination =
-        toSameOriginUrl(action.destination, crawledPage.url, origin) ||
-        toSameOriginUrl(href, crawledPage.url, origin);
+        toSameOriginUrl(action.destination, crawledPage.url, origin, serviceDomain) ||
+        toSameOriginUrl(href, crawledPage.url, origin, serviceDomain);
       const label = safeText(
         $(el).text() || $(el).attr("aria-label") || $(el).attr("value"),
         el.tagName.toLowerCase() === "form" ? "form" : "interaction"
@@ -674,6 +739,71 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
         }),
       });
     });
+
+    const generatedForThisPage = drafts.slice(pageDraftStartIndex);
+    const hasInfoBlock = generatedForThisPage.some((d) => d.componentType === "info_block");
+    const hasHeading = generatedForThisPage.some((d) => d.componentType === "heading");
+    const hasInteraction = generatedForThisPage.some((d) => d.componentType === "interaction");
+
+    // Fallback: when anti-bot/dynamic rendering yields sparse DOM, keep minimal analyzable structure.
+    if (!hasInfoBlock) {
+      const bodyTextSample = clamp(safeText($("body").text(), ""), 48) || "page_body";
+      drafts.push({
+        pageId,
+        componentType: "info_block",
+        label: `1. content_section: ${bodyTextSample}`,
+        selector: "body",
+        metadataJson: JSON.stringify({
+          stage: "step1_information_architecture",
+          blockKind: "content_section",
+          order: 1,
+          heading: null,
+          semanticTitle: bodyTextSample,
+          meaningfulToken: null,
+          linkCount: crawledPage.discoveredLinks.length,
+          buttonCount: 0,
+          subsectionCount: 0,
+          fallback: true,
+        }),
+      });
+    }
+
+    if (!hasHeading) {
+      drafts.push({
+        pageId,
+        componentType: "heading",
+        label: clamp(safeText(crawledPage.title, "page heading")),
+        selector: "title",
+        metadataJson: JSON.stringify({
+          stage: "step1_information_architecture",
+          level: 1,
+          id: null,
+          fallback: true,
+        }),
+      });
+    }
+
+    if (!hasInteraction && crawledPage.discoveredLinks.length > 0) {
+      crawledPage.discoveredLinks.slice(0, 6).forEach((link, idx) => {
+        drafts.push({
+          pageId,
+          componentType: "interaction",
+          label: clamp(`auto_link_${idx + 1}`),
+          selector: "a",
+          metadataJson: JSON.stringify({
+            stage: "step2_interaction_structure",
+            actionType: "navigate",
+            destination: link,
+            resolvedDestination: link,
+            href: link,
+            confidence: "medium",
+            id: null,
+            className: null,
+            fallback: true,
+          }),
+        });
+      });
+    }
   });
 
   const deduped = new Map<string, ComponentDraft>();
