@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer";
-import type { Element } from "domhandler";
+import type { Page } from "puppeteer";
+import type { Element as DomHandlerElement } from "domhandler";
 
 type ComponentDraft = {
   pageId: string;
@@ -151,7 +152,7 @@ function shouldKeepInfoBlock(
   return subsectionCount >= 2;
 }
 
-function inferInteractionAction($: cheerio.CheerioAPI, element: Element) {
+function inferInteractionAction($: cheerio.CheerioAPI, element: DomHandlerElement) {
   const $el = $(element);
   const tag = element.tagName.toLowerCase();
   const href = $el.attr("href") || null;
@@ -226,6 +227,100 @@ async function updateJob(jobId: string, data: Record<string, unknown>) {
   await prisma.analyzeJob.update({ where: { id: jobId }, data });
 }
 
+async function neutralizeBlockingPopups(page: Page) {
+  try {
+    await page.keyboard.press("Escape").catch(() => {});
+
+    await page.evaluate(() => {
+      const closeKeywords = [
+        "close",
+        "dismiss",
+        "skip",
+        "cancel",
+        "later",
+        "not now",
+        "닫기",
+        "나중에",
+        "취소",
+        "건너뛰기",
+        "x",
+      ];
+      const overlayKeywords = [
+        "popup",
+        "modal",
+        "dialog",
+        "overlay",
+        "backdrop",
+        "cookie",
+        "consent",
+        "newsletter",
+        "subscribe",
+        "팝업",
+        "모달",
+        "배너",
+        "쿠키",
+      ];
+
+      const safeClick = (el: Element | null) => {
+        if (!el) return;
+        if (!(el instanceof HTMLElement)) return;
+        try {
+          el.click();
+        } catch {}
+      };
+
+      const getText = (el: any) =>
+        `${el.textContent || ""} ${(el.getAttribute("aria-label") || "")}`.toLowerCase();
+
+      const closeCandidates = Array.from(
+        document.querySelectorAll(
+          "button, [role='button'], [aria-label], .close, .btn-close, [data-dismiss], [data-bs-dismiss]"
+        )
+      );
+      closeCandidates.forEach((el) => {
+        const text = getText(el);
+        if (closeKeywords.some((keyword) => text.includes(keyword))) {
+          safeClick(el);
+        }
+      });
+
+      const overlays = Array.from(
+        document.querySelectorAll(
+          "[role='dialog'], .modal, .popup, .overlay, .backdrop, .cookie, .consent, [class*='modal'], [class*='popup'], [class*='overlay']"
+        )
+      );
+      overlays.forEach((el) => {
+        const text = getText(el);
+        const classId = `${el.className || ""} ${el.id || ""}`.toLowerCase();
+        const style = window.getComputedStyle(el as Element);
+        const zIndex = Number(style.zIndex || 0);
+        const isFixedLayer = style.position === "fixed" || style.position === "sticky";
+        const likelyOverlay =
+          overlayKeywords.some((keyword) => text.includes(keyword) || classId.includes(keyword)) ||
+          (isFixedLayer && zIndex >= 1000);
+        if (!likelyOverlay) return;
+        if (el instanceof HTMLElement) {
+          el.style.setProperty("display", "none", "important");
+          el.style.setProperty("visibility", "hidden", "important");
+          el.style.setProperty("pointer-events", "none", "important");
+        }
+      });
+
+      const html = document.documentElement;
+      const body = document.body;
+      if (html) {
+        html.style.setProperty("overflow", "auto", "important");
+      }
+      if (body) {
+        body.style.setProperty("overflow", "auto", "important");
+        body.style.setProperty("position", "static", "important");
+      }
+    });
+  } catch (error) {
+    console.warn("Popup neutralization failed", error);
+  }
+}
+
 async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: string) {
   await updateJob(jobId, {
     status: "running",
@@ -261,6 +356,8 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
       await page
         .goto(nextUrl, { waitUntil: "networkidle2", timeout: 15000 })
         .catch((e) => console.warn("Goto timeout; proceeding with captured DOM", e));
+
+      await neutralizeBlockingPopups(page);
 
       const html = await page.content();
       await page.close();
