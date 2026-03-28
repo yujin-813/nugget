@@ -26,6 +26,9 @@ export default function ProjectDetail() {
   const [edgeForm, setEdgeForm] = useState({ fromPageId: "", toPageId: "" });
   const [newNodeForm, setNewNodeForm] = useState({ title: "", url: "" });
   const [selectedSitemapNodeId, setSelectedSitemapNodeId] = useState<string | null>(null);
+  const [hideBidirectionalEdges, setHideBidirectionalEdges] = useState(true);
+  const [hidePopupEdges, setHidePopupEdges] = useState(true);
+  const [focusSelectedNode, setFocusSelectedNode] = useState(false);
 
   useEffect(() => {
     fetchProject();
@@ -291,6 +294,33 @@ export default function ProjectDetail() {
   const selectedSitemapNode =
     sitemapNodes.find((node: { id: string }) => node.id === selectedSitemapNodeId) || sitemapNodes[0] || null;
 
+  const popupLikeNodeIds = new Set(
+    sitemapNodes
+      .filter((node) => {
+        const key = `${node.id} ${node.title}`.toLowerCase();
+        return /popup|modal|drawer|dialog|팝업|모달/.test(key);
+      })
+      .map((node) => node.id)
+  );
+
+  const displaySitemapEdges = uniqueSitemapEdges.filter((edge: any) => {
+    if (hidePopupEdges && (popupLikeNodeIds.has(edge.fromPageId) || popupLikeNodeIds.has(edge.toPageId))) {
+      return false;
+    }
+    if (hideBidirectionalEdges) {
+      const reverseExists = uniqueSitemapEdges.some(
+        (candidate: any) => candidate.fromPageId === edge.toPageId && candidate.toPageId === edge.fromPageId
+      );
+      if (reverseExists) {
+        return edge.fromPageId < edge.toPageId;
+      }
+    }
+    if (focusSelectedNode && selectedSitemapNode?.id) {
+      return edge.fromPageId === selectedSitemapNode.id || edge.toPageId === selectedSitemapNode.id;
+    }
+    return true;
+  });
+
   const pageDepth = new Map<string, number>();
   sitemapNodes.forEach((page: any) => {
     try {
@@ -468,6 +498,29 @@ export default function ProjectDetail() {
                 </button>
               </div>
             </div>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setHideBidirectionalEdges((prev) => !prev)}
+                style={{ padding: "0.35rem 0.6rem", borderRadius: "999px", border: "1px solid var(--border-color)", background: hideBidirectionalEdges ? "rgba(88,166,255,0.2)" : "transparent", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}
+              >
+                {hideBidirectionalEdges ? "양방향 정리 ON" : "양방향 정리 OFF"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHidePopupEdges((prev) => !prev)}
+                style={{ padding: "0.35rem 0.6rem", borderRadius: "999px", border: "1px solid var(--border-color)", background: hidePopupEdges ? "rgba(88,166,255,0.2)" : "transparent", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}
+              >
+                {hidePopupEdges ? "팝업 엣지 숨김 ON" : "팝업 엣지 숨김 OFF"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFocusSelectedNode((prev) => !prev)}
+                style={{ padding: "0.35rem 0.6rem", borderRadius: "999px", border: "1px solid var(--border-color)", background: focusSelectedNode ? "rgba(88,166,255,0.2)" : "transparent", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}
+              >
+                {focusSelectedNode ? "선택 노드 중심 ON" : "선택 노드 중심 OFF"}
+              </button>
+            </div>
             {editingSitemap && (
               <div className="glass-panel" style={{ marginBottom: "0.8rem", padding: "0.8rem" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.5rem", alignItems: "center" }}>
@@ -554,7 +607,7 @@ export default function ProjectDetail() {
                       </marker>
                     </defs>
 
-                    {uniqueSitemapEdges.map((edge: any, index: number) => {
+                    {displaySitemapEdges.map((edge: any, index: number) => {
                       const from = nodePosition.get(edge.fromPageId);
                       const to = nodePosition.get(edge.toPageId);
                       if (!from || !to) return null;
@@ -564,7 +617,20 @@ export default function ProjectDetail() {
                       const y2 = to.y + 12;
                       const bend = Math.max(24, (x2 - x1) / 2);
                       const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
-                      return <path key={`edge-${index}`} d={d} fill="none" stroke="rgba(148,163,184,0.55)" strokeWidth="1.3" markerEnd="url(#arrow)" />;
+                      const isFocused =
+                        !focusSelectedNode ||
+                        edge.fromPageId === selectedSitemapNode?.id ||
+                        edge.toPageId === selectedSitemapNode?.id;
+                      return (
+                        <path
+                          key={`edge-${index}`}
+                          d={d}
+                          fill="none"
+                          stroke={isFocused ? "rgba(148,163,184,0.72)" : "rgba(148,163,184,0.28)"}
+                          strokeWidth={isFocused ? "1.5" : "1.1"}
+                          markerEnd="url(#arrow)"
+                        />
+                      );
                     })}
 
                     {sitemapNodes.map((page: any) => {
