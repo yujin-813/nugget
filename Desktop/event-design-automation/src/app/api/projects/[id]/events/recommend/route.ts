@@ -296,6 +296,46 @@ function buildParameterTemplates(
     templates.push(...draft.contextParams);
   }
 
+  const userPropertyTemplates: EventParamTemplate[] = [
+    {
+      propertyName: "user_login_status",
+      propertyType: "string",
+      exampleValue: "logged_out",
+      isRequired: false,
+    },
+    {
+      propertyName: "user_signup_method",
+      propertyType: "string",
+      exampleValue: "email",
+      isRequired: false,
+    },
+    {
+      propertyName: "user_plan_tier",
+      propertyType: "string",
+      exampleValue: "free",
+      isRequired: false,
+    },
+    {
+      propertyName: "user_customer_type",
+      propertyType: "string",
+      exampleValue: "new",
+      isRequired: false,
+    },
+    {
+      propertyName: "user_region",
+      propertyType: "string",
+      exampleValue: "KR-11",
+      isRequired: false,
+    },
+    {
+      propertyName: "user_lifecycle_stage",
+      propertyType: "string",
+      exampleValue: "awareness",
+      isRequired: false,
+    },
+  ];
+  templates.push(...userPropertyTemplates);
+
   const deduped = new Map<string, EventParamTemplate>();
   templates.forEach((template) => {
     if (!deduped.has(template.propertyName)) {

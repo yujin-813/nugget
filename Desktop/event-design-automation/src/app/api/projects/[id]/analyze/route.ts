@@ -80,6 +80,44 @@ function extractInternalLinks($: cheerio.CheerioAPI, pageUrl: string, origin: st
   return Array.from(links).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
 
+async function extractInternalLinksFromBrowser(page: Page, pageUrl: string, origin: string) {
+  try {
+    const candidates = await page.evaluate(() => {
+      const values = new Set<string>();
+      const add = (value: string | null | undefined) => {
+        if (!value) return;
+        const v = String(value).trim();
+        if (!v) return;
+        values.add(v);
+      };
+
+      document.querySelectorAll("a[href], area[href]").forEach((el) => {
+        add((el as HTMLAnchorElement).getAttribute("href"));
+      });
+      document.querySelectorAll("form[action]").forEach((el) => {
+        add((el as HTMLFormElement).getAttribute("action"));
+      });
+      document.querySelectorAll("[data-href], [data-url], [onclick]").forEach((el) => {
+        add(el.getAttribute("data-href"));
+        add(el.getAttribute("data-url"));
+        const onclick = el.getAttribute("onclick") || "";
+        const match = onclick.match(/(https?:\/\/[^'"`\s)]+|\/[^'"`\s)]+)/i);
+        if (match?.[1]) add(match[1]);
+      });
+      return Array.from(values);
+    });
+
+    const links = new Set<string>();
+    candidates.forEach((candidate) => {
+      const normalized = toSameOriginUrl(candidate, pageUrl, origin);
+      if (normalized) links.add(normalized);
+    });
+    return Array.from(links).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
+  } catch {
+    return [];
+  }
+}
+
 function parseUrlStructure(rawUrl: string) {
   try {
     const parsed = new URL(rawUrl);
@@ -359,12 +397,17 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
 
       await neutralizeBlockingPopups(page);
 
+      await new Promise((resolve) => setTimeout(resolve, 300));
       const html = await page.content();
-      await page.close();
-
       const $ = cheerio.load(html);
       const title = safeText($("title").text(), nextUrl);
-      const discoveredLinks = extractInternalLinks($, nextUrl, origin);
+      const staticLinks = extractInternalLinks($, nextUrl, origin);
+      const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin);
+      const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks])).slice(
+        0,
+        MAX_DISCOVER_LINKS_PER_PAGE
+      );
+      await page.close();
 
       discoveredLinks.forEach((link) => {
         if (!visited.has(link) && !queued.has(link) && queue.length + crawledPages.length < MAX_ANALYZE_PAGES * 4) {

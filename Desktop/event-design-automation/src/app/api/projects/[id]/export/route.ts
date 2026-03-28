@@ -60,6 +60,7 @@ export async function GET(
       "Trigger Type",
       "Trigger Condition",
       "Parameter Template",
+      "User Property Template",
       "Priority",
       "Status"
     ];
@@ -69,8 +70,14 @@ export async function GET(
     for (const [index, ev] of events.entries()) {
       const existingEventCode = ev.properties.find((p) => p.propertyName === "event_code")?.exampleValue;
       const eventCode = existingEventCode || buildFallbackEventCode(ev.id, index);
-      const paramTemplateBody = ev.properties
-        .filter((p) => p.propertyName !== "event_code")
+      const eventParams = ev.properties.filter(
+        (p) => p.propertyName !== "event_code" && !p.propertyName.startsWith("user_")
+      );
+      const userParams = ev.properties.filter((p) => p.propertyName.startsWith("user_"));
+      const paramTemplateBody = eventParams
+        .map((p) => `${p.propertyName}:${p.propertyType}${p.isRequired ? "!" : ""}`)
+        .join(" | ");
+      const userPropertyTemplate = userParams
         .map((p) => `${p.propertyName}:${p.propertyType}${p.isRequired ? "!" : ""}`)
         .join(" | ");
       const paramTemplate = [`event_code:string!(${eventCode})`, paramTemplateBody]
@@ -83,6 +90,7 @@ export async function GET(
         `"${ev.triggerType || ''}"`,
         `"${ev.triggerCondition || ''}"`,
         `"${paramTemplate}"`,
+        `"${userPropertyTemplate}"`,
         `"${ev.priority || ''}"`,
         `"${ev.status}"`
       ];
