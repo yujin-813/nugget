@@ -456,46 +456,60 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
       if (!nextUrl || visited.has(nextUrl)) continue;
       visited.add(nextUrl);
 
-      const page = await browser.newPage();
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-      );
+      let page: Page | null = null;
+      try {
+        page = await browser.newPage();
+        page.on("dialog", async (dialog) => {
+          try {
+            await dialog.dismiss();
+          } catch {}
+        });
 
-      await page
-        .goto(nextUrl, { waitUntil: "networkidle2", timeout: 15000 })
-        .catch((e) => console.warn("Goto timeout; proceeding with captured DOM", e));
+        await page.setUserAgent(
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+        );
 
-      await neutralizeBlockingPopups(page);
+        await page
+          .goto(nextUrl, { waitUntil: "domcontentloaded", timeout: 15000 })
+          .catch((e) => console.warn("Goto timeout; proceeding with captured DOM", e));
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const html = await page.content();
-      const $ = cheerio.load(html);
-      const title = safeText($("title").text(), nextUrl);
-      const staticLinks = extractInternalLinks($, nextUrl, origin);
-      const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin);
-      const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin);
-      const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks, ...interactiveLinks])).slice(
-        0,
-        MAX_DISCOVER_LINKS_PER_PAGE
-      );
-      await page.close();
+        await neutralizeBlockingPopups(page);
 
-      discoveredLinks.forEach((link) => {
-        if (!visited.has(link) && !queued.has(link) && queue.length + crawledPages.length < MAX_ANALYZE_PAGES * 4) {
-          queue.push(link);
-          queued.add(link);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const html = await page.content();
+        const $ = cheerio.load(html);
+        const title = safeText($("title").text(), nextUrl);
+        const staticLinks = extractInternalLinks($, nextUrl, origin);
+        const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin);
+        const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin);
+        const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks, ...interactiveLinks])).slice(
+          0,
+          MAX_DISCOVER_LINKS_PER_PAGE
+        );
+
+        discoveredLinks.forEach((link) => {
+          if (!visited.has(link) && !queued.has(link) && queue.length + crawledPages.length < MAX_ANALYZE_PAGES * 4) {
+            queue.push(link);
+            queued.add(link);
+          }
+        });
+
+        crawledPages.push({
+          url: nextUrl,
+          title,
+          html,
+          discoveredLinks,
+        });
+
+        const progress = 10 + Math.round((crawledPages.length / MAX_ANALYZE_PAGES) * 35);
+        await updateJob(jobId, { progress: Math.min(progress, 45) });
+      } catch (crawlError) {
+        console.warn("Crawl page error, continuing:", nextUrl, crawlError);
+      } finally {
+        if (page) {
+          await page.close().catch(() => {});
         }
-      });
-
-      crawledPages.push({
-        url: nextUrl,
-        title,
-        html,
-        discoveredLinks,
-      });
-
-      const progress = 10 + Math.round((crawledPages.length / MAX_ANALYZE_PAGES) * 35);
-      await updateJob(jobId, { progress: Math.min(progress, 45) });
+      }
     }
   } finally {
     await browser.close();
