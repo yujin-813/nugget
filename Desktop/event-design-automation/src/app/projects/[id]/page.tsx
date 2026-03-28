@@ -408,7 +408,8 @@ export default function ProjectDetail() {
             <div
               style={{
                 width: '100%',
-                height: '260px',
+                minHeight: '420px',
+                aspectRatio: '16 / 9',
                 backgroundColor: '#fff',
                 borderRadius: 'var(--border-radius-md)',
                 overflow: 'hidden',
@@ -607,7 +608,7 @@ export default function ProjectDetail() {
                   <div style={{ color: "var(--text-secondary)", fontSize: "0.78rem", marginBottom: "0.6rem", wordBreak: "break-all" }}>
                     {selectedSitemapNode?.title || "none"} · {previewUrl}
                   </div>
-                  <div style={{ height: "140px", border: "1px solid var(--border-color)", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
+                  <div style={{ width: "100%", aspectRatio: "16 / 9", border: "1px solid var(--border-color)", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
                     <iframe src={previewUrl} style={{ width: "100%", height: "100%", border: "none" }} title="Mini Preview" sandbox="allow-same-origin allow-scripts allow-forms" />
                   </div>
                   <div style={{ marginTop: "0.6rem" }}>
