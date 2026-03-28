@@ -311,10 +311,10 @@ export default function ProjectDetail() {
   });
 
   const sortedDepths = Array.from(depthGroups.keys()).sort((a, b) => a - b);
-  const nodeWidth = 190;
-  const nodeHeight = 52;
-  const colGap = 110;
-  const rowGap = 26;
+  const nodeWidth = 210;
+  const nodeHeight = 64;
+  const colGap = 140;
+  const rowGap = 34;
   const graphPadding = 28;
   const maxRows = Math.max(1, ...Array.from(depthGroups.values()).map((group) => group.length));
   const graphWidth = graphPadding * 2 + sortedDepths.length * nodeWidth + Math.max(0, sortedDepths.length - 1) * colGap;
@@ -408,7 +408,7 @@ export default function ProjectDetail() {
             <div
               style={{
                 width: '100%',
-                minHeight: '420px',
+                minHeight: '520px',
                 aspectRatio: '16 / 9',
                 backgroundColor: '#fff',
                 borderRadius: 'var(--border-radius-md)',
@@ -545,7 +545,7 @@ export default function ProjectDetail() {
             )}
             {sitemapMessage && <p style={{ margin: "0 0 0.8rem 0", color: "var(--text-secondary)", fontSize: "0.85rem" }}>{sitemapMessage}</p>}
             {sitemapNodes.length > 0 ? (
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: "0.9rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: "0.9rem" }}>
                 <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '10px', background: 'rgba(0,0,0,0.18)' }}>
                   <svg width={Math.max(graphWidth, 900)} height={Math.max(graphHeight, 220)}>
                     <defs>
@@ -559,12 +559,12 @@ export default function ProjectDetail() {
                       const to = nodePosition.get(edge.toPageId);
                       if (!from || !to) return null;
                       const x1 = from.x + nodeWidth;
-                      const y1 = from.y + nodeHeight / 2;
+                      const y1 = from.y + nodeHeight - 12;
                       const x2 = to.x;
-                      const y2 = to.y + nodeHeight / 2;
+                      const y2 = to.y + 12;
                       const bend = Math.max(24, (x2 - x1) / 2);
                       const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
-                      return <path key={`edge-${index}`} d={d} fill="none" stroke="rgba(148,163,184,0.8)" strokeWidth="1.5" markerEnd="url(#arrow)" />;
+                      return <path key={`edge-${index}`} d={d} fill="none" stroke="rgba(148,163,184,0.55)" strokeWidth="1.3" markerEnd="url(#arrow)" />;
                     })}
 
                     {sitemapNodes.map((page: any) => {
@@ -586,10 +586,10 @@ export default function ProjectDetail() {
                           style={{ cursor: "pointer" }}
                         >
                           <rect x={pos.x} y={pos.y} rx="10" ry="10" width={nodeWidth} height={nodeHeight} fill={fill} stroke={stroke} strokeWidth="1.4" />
-                          <text x={pos.x + 12} y={pos.y + 23} fill="#fff" fontSize="12" fontWeight="600">
+                          <text x={pos.x + 12} y={pos.y + 24} fill="#fff" fontSize="12" fontWeight="600" stroke="rgba(15,23,42,0.95)" strokeWidth="2" paintOrder="stroke">
                             {pageTitle}
                           </text>
-                          <text x={pos.x + 12} y={pos.y + 40} fill="#9ca3af" fontSize="11">
+                          <text x={pos.x + 12} y={pos.y + 46} fill="#9ca3af" fontSize="11" stroke="rgba(15,23,42,0.95)" strokeWidth="2" paintOrder="stroke">
                             /{(() => {
                               try {
                                 return new URL(page.url).pathname.replace(/^\//, "") || "";

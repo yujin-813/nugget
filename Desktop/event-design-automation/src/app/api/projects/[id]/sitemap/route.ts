@@ -52,12 +52,22 @@ function parseJson<T>(json: string | null, fallback: T): T {
   }
 }
 
+function normalizeComparableUrl(raw: string) {
+  try {
+    const parsed = new URL(raw);
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${parsed.origin}${pathname}`;
+  } catch {
+    return raw.replace(/\/+$/, "");
+  }
+}
+
 function buildAutoSitemap(project: {
   pages: Array<{
     id: string;
     url: string;
     title: string | null;
-    components: Array<{ componentType: string; metadataJson: string | null }>;
+    components: Array<{ componentType: string; label: string | null; metadataJson: string | null }>;
   }>;
 }): SitemapPayload {
   const nodes: SitemapNode[] = project.pages.map((page) => ({
@@ -66,33 +76,58 @@ function buildAutoSitemap(project: {
     title: page.title || "Untitled",
   }));
 
-  const pageUrlToId = new Map(nodes.map((node) => [node.url, node.id]));
+  const pageUrlToId = new Map(nodes.map((node) => [normalizeComparableUrl(node.url), node.id]));
   const dedupEdges = new Map<string, SitemapEdge>();
+  const dedupNodes = new Map<string, SitemapNode>(nodes.map((node) => [node.id, node]));
 
   project.pages.forEach((page) => {
     page.components
       .filter((component) => component.componentType === "interaction")
-      .forEach((component) => {
-        const metadata = parseJson<{ actionType?: string; resolvedDestination?: string | null }>(
+      .forEach((component, index) => {
+        const metadata = parseJson<{ actionType?: string; resolvedDestination?: string | null; destination?: string | null }>(
           component.metadataJson,
           {}
         );
-        if (metadata.actionType !== "navigate" || !metadata.resolvedDestination) return;
-        const toPageId = pageUrlToId.get(metadata.resolvedDestination);
-        if (!toPageId || toPageId === page.id) return;
+        const actionType = metadata.actionType || "";
+        const resolvedDestination = metadata.resolvedDestination || metadata.destination || "";
 
-        const key = `${page.id}->${toPageId}`;
-        if (!dedupEdges.has(key)) {
-          dedupEdges.set(key, {
-            fromPageId: page.id,
-            toPageId,
-          });
+        if (actionType === "navigate" && resolvedDestination) {
+          const toPageId = pageUrlToId.get(normalizeComparableUrl(resolvedDestination));
+          if (toPageId && toPageId !== page.id) {
+            const key = `${page.id}->${toPageId}`;
+            if (!dedupEdges.has(key)) {
+              dedupEdges.set(key, {
+                fromPageId: page.id,
+                toPageId,
+              });
+            }
+          }
+          return;
+        }
+
+        if (actionType === "open_popup" || actionType === "open_modal") {
+          const popupId = `popup_${page.id}_${index + 1}`;
+          const popupTitle = component.label?.trim() || "Popup";
+          if (!dedupNodes.has(popupId)) {
+            dedupNodes.set(popupId, {
+              id: popupId,
+              url: resolvedDestination || `${page.url}#popup-${index + 1}`,
+              title: popupTitle,
+            });
+          }
+          const edgeKey = `${page.id}->${popupId}`;
+          if (!dedupEdges.has(edgeKey)) {
+            dedupEdges.set(edgeKey, {
+              fromPageId: page.id,
+              toPageId: popupId,
+            });
+          }
         }
       });
   });
 
   return {
-    nodes,
+    nodes: Array.from(dedupNodes.values()),
     edges: Array.from(dedupEdges.values()),
   };
 }
@@ -108,12 +143,13 @@ export async function GET(
       include: {
         pages: {
           include: {
-            components: {
-              select: {
-                componentType: true,
-                metadataJson: true,
+              components: {
+                select: {
+                  componentType: true,
+                  label: true,
+                  metadataJson: true,
+                },
               },
-            },
           },
         },
       },
