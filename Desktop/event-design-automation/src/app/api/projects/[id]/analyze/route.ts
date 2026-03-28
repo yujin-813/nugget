@@ -250,6 +250,70 @@ async function extractInternalLinksByClicks(page: Page, pageUrl: string, origin:
   return Array.from(discovered).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
 
+async function extractInternalLinksFromHamburgerMenu(
+  page: Page,
+  pageUrl: string,
+  origin: string,
+  serviceDomain: string
+) {
+  const discovered = new Set<string>();
+
+  const collectVisibleMenuLinks = async () => {
+    const links = await page.evaluate(() => {
+      const hrefs = new Set<string>();
+      const selectors = [
+        ".bm-menu-wrap[aria-hidden='false'] a[href]",
+        ".bm-item-list a[href]",
+        ".hamburger-menu-wrapper a[href]",
+        "nav a[href]",
+      ];
+      selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((el) => {
+          const href = (el as HTMLAnchorElement).getAttribute("href");
+          if (href) hrefs.add(href);
+        });
+      });
+      return Array.from(hrefs);
+    });
+    links.forEach((link) => {
+      const normalized = toSameOriginUrl(link, pageUrl, origin, serviceDomain);
+      if (normalized) discovered.add(normalized);
+    });
+  };
+
+  try {
+    const openerSelectors = [
+      ".bm-burger-button button",
+      "button[aria-label*='menu' i]",
+      "button[aria-label*='메뉴']",
+      "button[class*='hamburger']",
+      "[class*='hamburger-menu'] button",
+      "button[id*='menu']",
+      "[data-testid*='menu']",
+      "[class*='menu-button']",
+    ];
+
+    for (const selector of openerSelectors) {
+      const exists = await page.$(selector);
+      if (!exists) continue;
+      await page.click(selector).catch(() => null);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await collectVisibleMenuLinks();
+
+      // Close menu if close button exists.
+      const closeBtn = await page.$("button#react-burger-cross-btn, .bm-cross-button button, .bm-cross-button");
+      if (closeBtn) {
+        await closeBtn.click().catch(() => null);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  return Array.from(discovered).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
+}
+
 function parseUrlStructure(rawUrl: string) {
   try {
     const parsed = new URL(rawUrl);
@@ -566,10 +630,15 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
         const staticLinks = extractInternalLinks($, nextUrl, origin, serviceDomain);
         const browserLinks = await extractInternalLinksFromBrowser(page, nextUrl, origin, serviceDomain);
         const interactiveLinks = await extractInternalLinksByClicks(page, nextUrl, origin, serviceDomain);
-        const discoveredLinks = Array.from(new Set([...staticLinks, ...browserLinks, ...interactiveLinks])).slice(
-          0,
-          MAX_DISCOVER_LINKS_PER_PAGE
+        const hamburgerLinks = await extractInternalLinksFromHamburgerMenu(
+          page,
+          nextUrl,
+          origin,
+          serviceDomain
         );
+        const discoveredLinks = Array.from(
+          new Set([...staticLinks, ...browserLinks, ...interactiveLinks, ...hamburgerLinks])
+        ).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 
         discoveredLinks.forEach((link) => {
           if (!visited.has(link) && !queued.has(link) && queue.length + crawledPages.length < MAX_ANALYZE_PAGES * 4) {
