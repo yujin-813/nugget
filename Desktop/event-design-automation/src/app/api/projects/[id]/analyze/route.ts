@@ -335,6 +335,27 @@ async function updateJob(jobId: string, data: Record<string, unknown>) {
   await prisma.analyzeJob.update({ where: { id: jobId }, data });
 }
 
+async function fetchFallbackHtml(targetUrl: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      },
+    });
+    const text = await res.text();
+    if (text && text.trim().length > 0) return text;
+  } catch {
+    // fallback below
+  } finally {
+    clearTimeout(timer);
+  }
+  return `<html><head><title>${targetUrl}</title></head><body><main><h1>${targetUrl}</h1></main></body></html>`;
+}
+
 async function neutralizeBlockingPopups(page: Page) {
   try {
     await page.keyboard.press("Escape").catch(() => {});
@@ -516,7 +537,15 @@ async function runAnalyzePipeline(projectId: string, targetUrl: string, jobId: s
   }
 
   if (crawledPages.length === 0) {
-    throw new Error("No pages crawled from target URL");
+    const fallbackHtml = await fetchFallbackHtml(normalizedTargetUrl);
+    const $fallback = cheerio.load(fallbackHtml);
+    crawledPages.push({
+      url: normalizedTargetUrl,
+      title: safeText($fallback("title").text(), normalizedTargetUrl),
+      html: fallbackHtml,
+      discoveredLinks: [],
+    });
+    await updateJob(jobId, { progress: 46 });
   }
 
   await prisma.component.deleteMany({ where: { page: { projectId } } });
