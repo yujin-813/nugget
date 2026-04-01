@@ -31,6 +31,14 @@ type ProjectSummary = {
   amplitudeApiKey?: string | null;
 };
 
+type GtmOauthStatus = {
+  connected: boolean;
+  hasRefreshToken?: boolean;
+  connectedLabel?: string | null;
+  expiresAt?: number | null;
+  expired?: boolean | null;
+};
+
 export default function EventsPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -39,6 +47,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [autoTagging, setAutoTagging] = useState(false);
   const [autoTagNotice, setAutoTagNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<GtmOauthStatus | null>(null);
 
   // Modal state
   const [editingEvent, setEditingEvent] = useState<TrackingEvent | null>(null);
@@ -72,6 +81,11 @@ export default function EventsPage() {
 
       const eRes = await fetch(`/api/projects/${id}/events`);
       if (eRes.ok) setEvents((await eRes.json()) as TrackingEvent[]);
+
+      const oauthRes = await fetch(`/api/projects/${id}/gtm/oauth/status`);
+      if (oauthRes.ok) {
+        setOauthStatus((await oauthRes.json()) as GtmOauthStatus);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -114,11 +128,30 @@ export default function EventsPage() {
     const toolType = project?.toolType === "amplitude" ? "amplitude" : "ga4";
     const requiredFields =
       toolType === "amplitude"
-        ? ["GTM_ACCESS_TOKEN", "GTM_ACCOUNT_ID", "GTM_CONTAINER_ID", "GTM_WORKSPACE_ID", "AMPLITUDE_API_KEY"]
-        : ["GTM_ACCESS_TOKEN", "GTM_ACCOUNT_ID", "GTM_CONTAINER_ID", "GTM_WORKSPACE_ID", "GTM_GA4_MEASUREMENT_ID"];
+        ? ["GTM_ACCOUNT_ID", "GTM_CONTAINER_ID", "GTM_WORKSPACE_ID", "AMPLITUDE_API_KEY"]
+        : ["GTM_ACCOUNT_ID", "GTM_CONTAINER_ID", "GTM_WORKSPACE_ID", "GTM_GA4_MEASUREMENT_ID"];
     setAutoTagNotice(null);
+    if (!oauthStatus?.connected) {
+      setAutoTagNotice({ type: "error", message: "먼저 Google GTM OAuth 연결이 필요합니다." });
+      return;
+    }
     setAutoTagMissing(requiredFields);
     setShowAutoTagModal(true);
+  };
+
+  const connectGtmOauth = () => {
+    window.location.href = `/api/gtm/oauth/start?projectId=${id}`;
+  };
+
+  const disconnectGtmOauth = async () => {
+    try {
+      await fetch(`/api/projects/${id}/gtm/oauth/status`, { method: "DELETE" });
+      await fetchData();
+      setAutoTagNotice({ type: "success", message: "GTM OAuth 연결이 해제되었습니다." });
+    } catch (error) {
+      console.error(error);
+      setAutoTagNotice({ type: "error", message: "OAuth 연결 해제 중 오류가 발생했습니다." });
+    }
   };
 
   const submitAutoTagModal = async (e: FormEvent) => {
@@ -128,7 +161,6 @@ export default function EventsPage() {
       persistConfig: autoTagForm.persistConfig,
     };
 
-    if (autoTagMissing.includes("GTM_ACCESS_TOKEN")) payload.accessToken = autoTagForm.accessToken;
     if (autoTagMissing.includes("GTM_ACCOUNT_ID")) payload.gtmAccountId = autoTagForm.gtmAccountId;
     if (autoTagMissing.includes("GTM_CONTAINER_ID")) payload.gtmContainerId = autoTagForm.gtmContainerId;
     if (autoTagMissing.includes("GTM_WORKSPACE_ID")) payload.gtmWorkspaceId = autoTagForm.gtmWorkspaceId;
@@ -136,7 +168,6 @@ export default function EventsPage() {
     if (autoTagMissing.includes("AMPLITUDE_API_KEY")) payload.amplitudeApiKey = autoTagForm.amplitudeApiKey;
 
     const requiredEmpty =
-      (autoTagMissing.includes("GTM_ACCESS_TOKEN") && !autoTagForm.accessToken.trim()) ||
       (autoTagMissing.includes("GTM_ACCOUNT_ID") && !autoTagForm.gtmAccountId.trim()) ||
       (autoTagMissing.includes("GTM_CONTAINER_ID") && !autoTagForm.gtmContainerId.trim()) ||
       (autoTagMissing.includes("GTM_WORKSPACE_ID") && !autoTagForm.gtmWorkspaceId.trim()) ||
@@ -230,6 +261,13 @@ export default function EventsPage() {
           <h1 style={{ fontSize: '2rem', color: '#fff', marginTop: '0.5rem' }}>이벤트 설계 목록</h1>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
+          <button
+            className="btn-primary"
+            onClick={oauthStatus?.connected ? disconnectGtmOauth : connectGtmOauth}
+            style={{ background: oauthStatus?.connected ? '#6b7280' : '#ea580c' }}
+          >
+            {oauthStatus?.connected ? "GTM OAuth 연결 해제" : "Google로 GTM 연결"}
+          </button>
           <button className="btn-primary" onClick={downloadTrackingPlan} style={{ background: 'var(--success-color)' }}>
             로그정의서 자동 생성
           </button>
@@ -252,6 +290,15 @@ export default function EventsPage() {
           <p style={{ margin: 0, color: autoTagNotice.type === "success" ? "#86efac" : "#fca5a5" }}>{autoTagNotice.message}</p>
         </div>
       )}
+      <div className="glass-panel" style={{ marginBottom: "1rem", padding: "0.75rem 1rem" }}>
+        <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+          GTM OAuth 상태:{" "}
+          <span style={{ color: "#fff", fontWeight: 600 }}>
+            {oauthStatus?.connected ? "Connected" : "Not connected"}
+          </span>
+          {oauthStatus?.expiresAt ? ` · 만료 ${new Date(oauthStatus.expiresAt).toLocaleString()}` : ""}
+        </div>
+      </div>
 
       <div className="glass-panel" style={{ padding: '0', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -369,7 +416,7 @@ export default function EventsPage() {
           <div className="glass-panel" style={{ width: '100%', maxWidth: '640px', backgroundColor: 'var(--bg-color)', padding: '2rem' }}>
             <h2 style={{ marginBottom: '0.5rem', color: '#fff' }}>자동 태깅 설정 입력</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-              자동 태깅에 필요한 값을 입력한 뒤 실행합니다.
+              OAuth 연결 후 자동 태깅에 필요한 프로젝트 값을 입력한 뒤 실행합니다.
             </p>
             <div className="helper-box">
               {inferredToolType === "ga4" ? (
@@ -385,9 +432,6 @@ export default function EventsPage() {
               )}
             </div>
             <form onSubmit={submitAutoTagModal} style={{ display: 'grid', gap: '0.85rem' }}>
-              {autoTagMissing.includes("GTM_ACCESS_TOKEN") && (
-                <input className="form-input" type="text" placeholder="GTM Access Token" value={autoTagForm.accessToken} onChange={(e) => setAutoTagForm({ ...autoTagForm, accessToken: e.target.value })} />
-              )}
               {autoTagMissing.includes("GTM_ACCOUNT_ID") && (
                 <input className="form-input" type="text" placeholder="GTM Account ID" value={autoTagForm.gtmAccountId} onChange={(e) => setAutoTagForm({ ...autoTagForm, gtmAccountId: e.target.value })} />
               )}
