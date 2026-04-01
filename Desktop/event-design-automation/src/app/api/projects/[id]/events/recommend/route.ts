@@ -301,6 +301,39 @@ function normalizeEventName(raw: string, fallback = "custom_event"): string {
   return value.slice(0, EVENT_NAME_MAX);
 }
 
+function toBaseEventName(eventName: string) {
+  const baseCandidates = [
+    "select_content",
+    "click_cta",
+    "select_option",
+    "toggle_filter",
+    "file_download",
+    "submit_form",
+    "generate_lead",
+    "view_promotion",
+    "select_promotion",
+    "dismiss_promotion",
+  ];
+  for (const base of baseCandidates) {
+    if (eventName === base || eventName.startsWith(`${base}_`)) return base;
+  }
+  return eventName;
+}
+
+function inferContentType(eventName: string) {
+  if (eventName.startsWith("select_content")) return "content";
+  if (eventName.startsWith("click_cta")) return "cta";
+  if (eventName.startsWith("select_option")) return "option";
+  if (eventName.startsWith("toggle_filter")) return "filter";
+  if (eventName.startsWith("view_promotion")) return "promotion_view";
+  if (eventName.startsWith("select_promotion")) return "promotion_select";
+  if (eventName.startsWith("dismiss_promotion")) return "promotion_dismiss";
+  if (eventName.startsWith("file_download")) return "download";
+  if (eventName.startsWith("submit_form")) return "form_submit";
+  if (eventName.startsWith("generate_lead")) return "lead";
+  return "content";
+}
+
 function hasKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
 }
@@ -1574,10 +1607,11 @@ function designEvents(
   >();
 
   step2.interactions.slice(0, 40).forEach((interaction) => {
-    const eventName = normalizeEventName(inferSemanticEventName(interaction));
+    const semanticName = normalizeEventName(inferSemanticEventName(interaction));
+    const baseEventName = toBaseEventName(semanticName);
     const existing =
-      groupedBySemanticName.get(eventName) ||
-      { eventName, labels: [], destinations: [], actionTypes: [], count: 0 };
+      groupedBySemanticName.get(baseEventName) ||
+      { eventName: baseEventName, labels: [], destinations: [], actionTypes: [], count: 0 };
 
     if (interaction.label && !existing.labels.includes(interaction.label)) {
       existing.labels.push(interaction.label);
@@ -1590,7 +1624,7 @@ function designEvents(
     }
     existing.count += 1;
 
-    groupedBySemanticName.set(eventName, existing);
+    groupedBySemanticName.set(baseEventName, existing);
   });
 
   const isHighPriorityName = (name: string) =>
@@ -1603,6 +1637,7 @@ function designEvents(
     count: number
   ): EventParamTemplate[] => {
     const firstLabel = labels[0] || "cta_button";
+    const pageCategory = intentHint?.pageType || slugify(pageTitle || "page", "page");
     const params: EventParamTemplate[] = [
       {
         propertyName: "item_id",
@@ -1632,6 +1667,24 @@ function designEvents(
         propertyName: "sample_count",
         propertyType: "number",
         exampleValue: String(count),
+        isRequired: false,
+      },
+      {
+        propertyName: "content_label",
+        propertyType: "string",
+        exampleValue: firstLabel,
+        isRequired: false,
+      },
+      {
+        propertyName: "content_type",
+        propertyType: "string",
+        exampleValue: inferContentType(eventName),
+        isRequired: false,
+      },
+      {
+        propertyName: "content_category",
+        propertyType: "string",
+        exampleValue: pageCategory,
         isRequired: false,
       },
     ];
