@@ -19,30 +19,31 @@ type GoogleTokenResponse = {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const baseUrl = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || url.origin;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/projects?gtm_oauth=error&reason=${encodeURIComponent(error)}`, url.origin));
+    return NextResponse.redirect(new URL(`/projects?gtm_oauth=error&reason=${encodeURIComponent(error)}`, baseUrl));
   }
 
   const cookieMap = parseCookieHeader(request.headers.get("cookie"));
   const cookieState = cookieMap[GTM_OAUTH_STATE_COOKIE];
   if (!code || !state || !cookieState || state !== cookieState) {
-    return NextResponse.redirect(new URL("/projects?gtm_oauth=error&reason=state_mismatch", url.origin));
+    return NextResponse.redirect(new URL("/projects?gtm_oauth=error&reason=state_mismatch", baseUrl));
   }
 
   const parsedState = parseOauthState(state);
   if (!parsedState?.projectId) {
-    return NextResponse.redirect(new URL("/projects?gtm_oauth=error&reason=invalid_state", url.origin));
+    return NextResponse.redirect(new URL("/projects?gtm_oauth=error&reason=invalid_state", baseUrl));
   }
 
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
   if (!clientId || !clientSecret || !redirectUri) {
-    return NextResponse.redirect(new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=error&reason=server_env`, url.origin));
+    return NextResponse.redirect(new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=error&reason=server_env`, baseUrl));
   }
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -60,11 +61,11 @@ export async function GET(request: Request) {
   const tokenJson = (await tokenRes.json().catch(() => ({}))) as GoogleTokenResponse;
   if (!tokenRes.ok || !tokenJson.access_token) {
     return NextResponse.redirect(
-      new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=error&reason=token_exchange_failed`, url.origin)
+      new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=error&reason=token_exchange_failed`, baseUrl)
     );
   }
 
-  const redirectTo = new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=connected`, url.origin);
+  const redirectTo = new URL(`/projects/${parsedState.projectId}/events?gtm_oauth=connected`, baseUrl);
   const res = NextResponse.redirect(redirectTo);
   const expiresAt = Date.now() + (tokenJson.expires_in || 3600) * 1000;
   res.cookies.set(GTM_ACCESS_TOKEN_COOKIE, tokenJson.access_token, {
@@ -100,4 +101,3 @@ export async function GET(request: Request) {
   });
   return res;
 }
-
