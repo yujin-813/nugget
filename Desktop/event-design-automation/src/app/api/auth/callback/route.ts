@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { createSession, SESSION_COOKIE, ensureDefaultWorkspace } from "@/lib/auth";
+import { createSession, ensureDefaultWorkspace } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 
 function buildRedirectUri(request: Request) {
