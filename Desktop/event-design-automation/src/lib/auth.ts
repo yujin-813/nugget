@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
@@ -44,6 +45,14 @@ export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return user;
+}
+
+export async function requireUserForPage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
   }
   return user;
 }

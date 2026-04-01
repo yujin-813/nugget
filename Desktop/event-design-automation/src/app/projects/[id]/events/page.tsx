@@ -132,7 +132,11 @@ export default function EventsPage() {
         : ["GTM_ACCOUNT_ID", "GTM_CONTAINER_ID", "GTM_WORKSPACE_ID", "GTM_GA4_MEASUREMENT_ID"];
     setAutoTagNotice(null);
     if (!oauthStatus?.connected) {
-      setAutoTagNotice({ type: "error", message: "먼저 Google GTM OAuth 연결이 필요합니다." });
+      setAutoTagNotice({
+        type: "error",
+        message: "Google Tag Manager 연결이 필요합니다. 연결 화면으로 이동합니다.",
+      });
+      connectGtmOauth();
       return;
     }
     setAutoTagMissing(requiredFields);
@@ -140,14 +144,14 @@ export default function EventsPage() {
   };
 
   const connectGtmOauth = () => {
-    window.location.href = `/api/gtm/oauth/start?projectId=${id}`;
+    window.location.href = `/api/projects/${id}/gtm/oauth/start?projectId=${id}`;
   };
 
   const disconnectGtmOauth = async () => {
     try {
       await fetch(`/api/projects/${id}/gtm/oauth/status`, { method: "DELETE" });
       await fetchData();
-      setAutoTagNotice({ type: "success", message: "GTM OAuth 연결이 해제되었습니다." });
+      setAutoTagNotice({ type: "success", message: "Google Tag Manager 연결이 해제되었습니다." });
     } catch (error) {
       console.error(error);
       setAutoTagNotice({ type: "error", message: "OAuth 연결 해제 중 오류가 발생했습니다." });
@@ -266,7 +270,7 @@ export default function EventsPage() {
             onClick={oauthStatus?.connected ? disconnectGtmOauth : connectGtmOauth}
             style={{ background: oauthStatus?.connected ? '#6b7280' : '#ea580c' }}
           >
-            {oauthStatus?.connected ? "GTM OAuth 연결 해제" : "Google로 GTM 연결"}
+            {oauthStatus?.connected ? "연결 해제" : "Google Tag Manager 연결"}
           </button>
           <button className="btn-primary" onClick={downloadTrackingPlan} style={{ background: 'var(--success-color)' }}>
             로그정의서 자동 생성
@@ -292,7 +296,7 @@ export default function EventsPage() {
       )}
       <div className="glass-panel" style={{ marginBottom: "1rem", padding: "0.75rem 1rem" }}>
         <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-          GTM OAuth 상태:{" "}
+          GTM 연결 상태:{" "}
           <span style={{ color: "#fff", fontWeight: 600 }}>
             {oauthStatus?.connected ? "Connected" : "Not connected"}
           </span>
