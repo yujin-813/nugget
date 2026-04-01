@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const storedState = cookies().get("oauth_state")?.value;
+  const storedState = (await cookies()).get("oauth_state")?.value;
 
   if (!code || !state || !storedState || state !== storedState) {
     return NextResponse.redirect(new URL("/login?error=oauth_state", url.origin));

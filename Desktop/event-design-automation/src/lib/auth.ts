@@ -6,8 +6,8 @@ import { logActivity } from "@/lib/activity";
 import { SESSION_COOKIE } from "@/lib/constants";
 const SESSION_DAYS = 14;
 
-export function getSessionTokenFromCookies() {
-  const store = cookies();
+export async function getSessionTokenFromCookies() {
+  const store = await cookies();
   return store.get(SESSION_COOKIE)?.value || "";
 }
 
@@ -26,7 +26,7 @@ export async function destroySession(token: string) {
 }
 
 export async function getCurrentUser() {
-  const token = getSessionTokenFromCookies();
+  const token = await getSessionTokenFromCookies();
   if (!token) return null;
   const session = await prisma.session.findUnique({
     where: { token },
