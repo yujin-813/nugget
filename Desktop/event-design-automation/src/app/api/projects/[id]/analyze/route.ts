@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer";
 import type { Page } from "puppeteer";
@@ -1429,7 +1431,20 @@ function getErrorMessage(error: unknown) {
 }
 
 async function updateJob(jobId: string, data: Record<string, unknown>) {
-  await prisma.analyzeJob.update({ where: { id: jobId }, data });
+  const job = await prisma.analyzeJob.update({
+    where: { id: jobId },
+    data,
+    include: { project: true },
+  });
+
+  if (data.status === "completed" && job.initiatedByUserId) {
+    await logActivity({
+      name: "analysis_completed",
+      userId: job.initiatedByUserId,
+      workspaceId: job.project.workspaceId,
+      projectId: job.projectId,
+    });
+  }
 }
 
 async function fetchFallbackHtml(targetUrl: string) {
@@ -2762,15 +2777,27 @@ export async function POST(
     const params = await context.params;
     const { id } = params;
 
+    const access = await requireProjectAccess(id, { write: true });
+    if (access instanceof NextResponse) return access;
+
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
     const job = await prisma.analyzeJob.create({
       data: {
         projectId: id,
+        initiatedByUserId: access.user.id,
         status: "queued",
         progress: 0,
       },
+    });
+
+    await logActivity({
+      name: "analysis_started",
+      userId: access.user.id,
+      workspaceId: access.workspaceId,
+      projectId: id,
+      metadata: { jobId: job.id },
     });
 
     setTimeout(() => {

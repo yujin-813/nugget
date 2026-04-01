@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 type ApprovedEvent = {
   id: string;
@@ -57,6 +59,9 @@ export async function GET(
   try {
     const params = await context.params;
     const { id } = params;
+
+    const access = await requireProjectAccess(id);
+    if (access instanceof NextResponse) return access;
 
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -137,12 +142,20 @@ export async function GET(
 
     const filename = `gtm_recipe_${sanitizeName(project.name)}.json`;
 
-    return new NextResponse(JSON.stringify(packageJson, null, 2), {
+    const response = new NextResponse(JSON.stringify(packageJson, null, 2), {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
+    await logActivity({
+      name: "export_downloaded",
+      userId: access.user.id,
+      workspaceId: access.workspaceId,
+      projectId: id,
+      metadata: { format: "gtm_json" },
+    });
+    return response;
   } catch (error) {
     console.error("Export GTM JSON Error:", error);
     return NextResponse.json({ error: "Failed to export GTM package" }, { status: 500 });

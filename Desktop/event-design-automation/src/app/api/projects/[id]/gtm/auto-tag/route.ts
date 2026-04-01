@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
+import { GTM_ACCESS_TOKEN_COOKIE, parseCookieHeader } from "@/lib/gtmOAuth";
 
 type GtmConfig = {
   accessToken: string;
@@ -44,7 +46,7 @@ class GtmApiError extends Error {
 
 function getMissingConfig(config: Partial<GtmConfig>, toolType: string) {
   const missing: string[] = [];
-  if (!config.accessToken) missing.push("GTM_ACCESS_TOKEN");
+  if (!config.accessToken) missing.push("GTM_OAUTH_CONNECTION");
   if (!config.accountId) missing.push("GTM_ACCOUNT_ID");
   if (!config.containerId) missing.push("GTM_CONTAINER_ID");
   if (!config.workspaceId) missing.push("GTM_WORKSPACE_ID");
@@ -166,6 +168,9 @@ export async function POST(
     const params = await context.params;
     const { id } = params;
 
+    const access = await requireProjectAccess(id, { write: true });
+    if (access instanceof NextResponse) return access;
+
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
@@ -193,8 +198,11 @@ export async function POST(
 
     const normalizedToolType = project.toolType === "amplitude" ? "amplitude" : "ga4";
 
+    const cookieMap = parseCookieHeader(request.headers.get("cookie"));
+    const oauthAccessToken = cookieMap[GTM_ACCESS_TOKEN_COOKIE] || "";
+
     const configCandidate: Partial<GtmConfig> = {
-      accessToken: body.accessToken?.trim() || process.env.GTM_ACCESS_TOKEN,
+      accessToken: body.accessToken?.trim() || oauthAccessToken || process.env.GTM_ACCESS_TOKEN,
       accountId: body.gtmAccountId?.trim() || project.gtmAccountId || process.env.GTM_ACCOUNT_ID,
       containerId: body.gtmContainerId?.trim() || project.gtmContainerId || process.env.GTM_CONTAINER_ID,
       workspaceId: body.gtmWorkspaceId?.trim() || project.gtmWorkspaceId || process.env.GTM_WORKSPACE_ID,
@@ -208,7 +216,7 @@ export async function POST(
         {
           error: "GTM config is missing",
           missing,
-          message: "Set required GTM_* env values before auto-tagging.",
+          message: "Connect Google GTM OAuth and fill required GTM IDs before auto-tagging.",
         },
         { status: 400 }
       );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireEventAccess } from "@/lib/auth";
 
 export async function PUT(
   request: Request,
@@ -8,6 +9,8 @@ export async function PUT(
   try {
     const params = await context.params;
     const { eventId } = params;
+    const access = await requireEventAccess(eventId, { write: true });
+    if (access instanceof NextResponse) return access;
     const body = await request.json();
     
     // allow partial updates
@@ -38,7 +41,10 @@ export async function DELETE(
   try {
     const params = await context.params;
     const { eventId } = params;
-    
+
+    const access = await requireEventAccess(eventId, { write: true });
+    if (access instanceof NextResponse) return access;
+
     await prisma.event.delete({
       where: { id: eventId },
     });

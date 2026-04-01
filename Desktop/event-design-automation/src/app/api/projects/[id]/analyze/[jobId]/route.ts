@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
 
 function parseResultJson(raw: string | null) {
   if (!raw) return null;
@@ -17,6 +18,9 @@ export async function GET(
   try {
     const params = await context.params;
     const { id, jobId } = params;
+
+    const access = await requireProjectAccess(id);
+    if (access instanceof NextResponse) return access;
 
     const job = await prisma.analyzeJob.findUnique({
       where: { id: jobId },

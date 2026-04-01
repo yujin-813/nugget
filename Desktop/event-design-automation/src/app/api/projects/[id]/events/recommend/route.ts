@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 type ParsedComponent = {
   id: string;
@@ -1894,6 +1896,9 @@ export async function POST(
     const params = await context.params;
     const { id } = params;
 
+    const access = await requireProjectAccess(id, { write: true });
+    if (access instanceof NextResponse) return access;
+
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
@@ -2236,6 +2241,14 @@ export async function POST(
         )
       );
     }
+
+    await logActivity({
+      name: "result_viewed",
+      userId: access.user.id,
+      workspaceId: access.workspaceId,
+      projectId: id,
+      metadata: { source: "events_recommend", inserted: eventsToInsert.length },
+    });
 
     return NextResponse.json({
       success: true,

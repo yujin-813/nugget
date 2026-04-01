@@ -9,6 +9,8 @@ datasource db {
 
 model Project {
   id           String        @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name         String
   targetUrl    String
   analysisGoal String
@@ -24,6 +26,65 @@ model Project {
   pages        Page[]
   events       Event[]
   analyzeJobs  AnalyzeJob[]
+}
+
+model User {
+  id                  String             @id @default(cuid())
+  email               String             @unique
+  name                String?
+  image               String?
+  googleSub           String?            @unique
+  defaultWorkspaceId  String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  memberships         WorkspaceMember[]
+  sessions            Session[]
+  activityEvents      ActivityEvent[]
+}
+
+model Workspace {
+  id          String             @id @default(cuid())
+  name        String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  members     WorkspaceMember[]
+  projects    Project[]
+  events      ActivityEvent[]
+}
+
+model WorkspaceMember {
+  id          String     @id @default(cuid())
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String     @default("owner") // owner, member, viewer
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([workspaceId, userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model ActivityEvent {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  name        String
+  metadataJson String?
+  createdAt   DateTime  @default(now())
 }
 
 model Page {
@@ -80,6 +141,8 @@ model AnalyzeJob {
   id           String   @id @default(cuid())
   projectId    String
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  initiatedByUserId String?
+  initiatedByUser   User? @relation(fields: [initiatedByUserId], references: [id], onDelete: SetNull)
   status       String   @default("queued") // queued, running, completed, failed
   progress     Int      @default(0)
   resultJson   String?

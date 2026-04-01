@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(
   request: Request,
@@ -8,7 +10,10 @@ export async function GET(
   try {
     const params = await context.params;
     const { id } = params;
-    
+
+    const access = await requireProjectAccess(id);
+    if (access instanceof NextResponse) return access;
+
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
@@ -16,6 +21,14 @@ export async function GET(
       where: { projectId: id },
       include: { properties: true },
       orderBy: { createdAt: "desc" },
+    });
+
+    await logActivity({
+      name: "result_viewed",
+      userId: access.user.id,
+      workspaceId: access.workspaceId,
+      projectId: id,
+      metadata: { source: "events_list" },
     });
 
     return NextResponse.json(events);

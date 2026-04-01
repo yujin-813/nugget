@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess } from "@/lib/auth";
 
 type SitemapNode = {
   id: string;
@@ -138,6 +139,8 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params;
+    const access = await requireProjectAccess(id);
+    if (access instanceof NextResponse) return access;
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
@@ -177,6 +180,8 @@ export async function PUT(
 ) {
   try {
     const { id } = await context.params;
+    const access = await requireProjectAccess(id, { write: true });
+    if (access instanceof NextResponse) return access;
     const body = (await request.json().catch(() => ({}))) as Partial<SitemapPayload> & {
       reset?: boolean;
     };
