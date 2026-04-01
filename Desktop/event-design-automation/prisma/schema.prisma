@@ -26,6 +26,7 @@ model Project {
   pages        Page[]
   events       Event[]
   analyzeJobs  AnalyzeJob[]
+  activityEvents ActivityEvent[]
 }
 
 model User {
@@ -40,6 +41,7 @@ model User {
   memberships         WorkspaceMember[]
   sessions            Session[]
   activityEvents      ActivityEvent[]
+  initiatedAnalyzeJobs AnalyzeJob[] @relation("AnalyzeJobInitiator")
 }
 
 model Workspace {
@@ -142,7 +144,7 @@ model AnalyzeJob {
   projectId    String
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   initiatedByUserId String?
-  initiatedByUser   User? @relation(fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+  initiatedByUser   User? @relation("AnalyzeJobInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
   status       String   @default("queued") // queued, running, completed, failed
   progress     Int      @default(0)
   resultJson   String?
