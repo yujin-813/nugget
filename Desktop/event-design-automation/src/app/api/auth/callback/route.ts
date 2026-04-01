@@ -6,6 +6,10 @@ import { SESSION_COOKIE } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 
 function buildRedirectUri(request: Request) {
+  const explicitBase = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+  if (explicitBase) {
+    return `${explicitBase.replace(/\/+$/, "")}/api/auth/callback`;
+  }
   const url = new URL(request.url);
   return `${url.origin}/api/auth/callback`;
 }

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 function buildRedirectUri(request: Request) {
+  const explicitBase = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+  if (explicitBase) {
+    return `${explicitBase.replace(/\/+$/, "")}/api/auth/callback`;
+  }
   const url = new URL(request.url);
   return `${url.origin}/api/auth/callback`;
 }
