@@ -40,6 +40,23 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <Sidebar />
         <main style={{ marginLeft: '250px', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           {children}
+          <footer
+            style={{
+              marginTop: "auto",
+              padding: "1.5rem 2rem",
+              borderTop: "1px solid var(--border-color)",
+              display: "flex",
+              gap: "1rem",
+              justifyContent: "flex-start",
+            }}
+          >
+            <a href="/privacy" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.9rem" }}>
+              개인정보처리방침
+            </a>
+            <a href="/terms" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.9rem" }}>
+              이용약관
+            </a>
+          </footer>
         </main>
       </body>
     </html>
