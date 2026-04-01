@@ -19,15 +19,16 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const storedState = (await cookies()).get("oauth_state")?.value;
+  const baseUrl = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || url.origin;
 
   if (!code || !state || !storedState || state !== storedState) {
-    return NextResponse.redirect(new URL("/login?error=oauth_state", url.origin));
+    return NextResponse.redirect(new URL("/login?error=oauth_state", baseUrl));
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL("/login?error=oauth_config", url.origin));
+    return NextResponse.redirect(new URL("/login?error=oauth_config", baseUrl));
   }
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -43,20 +44,20 @@ export async function GET(request: Request) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=token_exchange", url.origin));
+    return NextResponse.redirect(new URL("/login?error=token_exchange", baseUrl));
   }
 
   const tokenJson = await tokenRes.json();
   const accessToken = tokenJson.access_token as string | undefined;
   if (!accessToken) {
-    return NextResponse.redirect(new URL("/login?error=token_missing", url.origin));
+    return NextResponse.redirect(new URL("/login?error=token_missing", baseUrl));
   }
 
   const userInfoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!userInfoRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=userinfo", url.origin));
+    return NextResponse.redirect(new URL("/login?error=userinfo", baseUrl));
   }
   const userInfo = await userInfoRes.json();
 
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
   const googleSub = String(userInfo.sub || "").trim();
 
   if (!email) {
-    return NextResponse.redirect(new URL("/login?error=no_email", url.origin));
+    return NextResponse.redirect(new URL("/login?error=no_email", baseUrl));
   }
 
   const user = await prisma.user.upsert({
@@ -83,7 +84,7 @@ export async function GET(request: Request) {
   });
 
   const session = await createSession(user.id);
-  const response = NextResponse.redirect(new URL("/projects", url.origin));
+  const response = NextResponse.redirect(new URL("/projects", baseUrl));
   response.cookies.set(SESSION_COOKIE, session.token, {
     httpOnly: true,
     sameSite: "lax",
