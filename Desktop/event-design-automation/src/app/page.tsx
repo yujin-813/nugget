@@ -11,6 +11,14 @@ export default function Home() {
         <Link href="/projects/new" style={{ textDecoration: 'none' }}>
           <button className="btn-primary" style={{ padding: '0.75rem 2rem', fontSize: '1.1rem' }}>프로젝트 시작하기</button>
         </Link>
+        <div style={{ marginTop: "1.5rem", display: "flex", gap: "1rem", justifyContent: "center" }}>
+          <Link href="/privacy" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.9rem" }}>
+            개인정보처리방침
+          </Link>
+          <Link href="/terms" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.9rem" }}>
+            이용약관
+          </Link>
+        </div>
       </div>
     </div>
   );

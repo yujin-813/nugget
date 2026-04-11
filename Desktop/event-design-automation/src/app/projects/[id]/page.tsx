@@ -1,13 +1,171 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+
+type JsonRecord = Record<string, unknown>;
+
+type SitemapNode = {
+  id: string;
+  url: string;
+  title: string;
+};
+
+type SitemapEdge = {
+  fromPageId: string;
+  toPageId: string;
+};
+
+type ProjectComponent = {
+  id: string;
+  componentType: string;
+  label: string | null;
+  selector: string | null;
+  metadataJson: string | null;
+};
+
+type ProjectPageData = {
+  id: string;
+  url: string;
+  title: string | null;
+  components: ProjectComponent[];
+};
+
+type ProjectEventData = {
+  id: string;
+  pageId: string | null;
+  eventName: string;
+  status?: string | null;
+};
+
+type PageClassification = {
+  pageId: string;
+  pageType?: string | null;
+  pageGoal?: string | null;
+  primaryCta?: string | null;
+  secondaryCta?: string | null;
+};
+
+type SectionInfo = {
+  order?: number;
+  sectionType?: string;
+  sectionLabel?: string;
+  sectionGoal?: string;
+};
+
+type SectionCollection = {
+  pageId: string;
+  sections?: SectionInfo[];
+};
+
+type MenuTreeNode = {
+  id: string;
+  title: string;
+  url: string | null;
+  pageType: string;
+  virtual?: boolean;
+  children: MenuTreeNode[];
+};
+
+type MenuSection = {
+  sectionType: string;
+  title: string;
+  nodeCount?: number;
+  trees: MenuTreeNode[];
+};
+
+type CoreUserFlow = {
+  flowId: string;
+  flowType: string;
+  pages?: Array<{ pageType?: string | null }>;
+};
+
+type LlmUsage = {
+  model?: string | null;
+  provider?: string | null;
+  llmMode?: string | null;
+  approxInputTokens?: number;
+  approxOutputTokens?: number;
+  maxInputTokensPerPage?: number;
+  maxOutputTokensPerPage?: number;
+  usedLlm?: boolean;
+  inputCapped?: boolean;
+};
+
+type AnalyzeSnapshot = {
+  ai_interpretation?: {
+    llmUsage?: LlmUsage | null;
+    updatedAt?: string | null;
+  } | null;
+  page_classification?: PageClassification[];
+  section_structure?: SectionCollection[];
+  page_section_map?: SectionCollection[];
+  menu_structure?: {
+    trees?: MenuTreeNode[];
+    sections?: MenuSection[];
+  } | null;
+  core_user_flows?: CoreUserFlow[];
+};
+
+type ProjectDetailData = {
+  id: string;
+  name: string;
+  targetUrl: string;
+  analysisGoal: string;
+  pages: ProjectPageData[];
+  events: ProjectEventData[];
+  analyzeSnapshot?: AnalyzeSnapshot | null;
+  _count?: {
+    events?: number;
+    pages?: number;
+  };
+};
+
+type MappedMenuPage = {
+  id: string;
+  title: string;
+  url: string;
+  sections: SectionInfo[];
+};
+
+type AdvancedStructureRow = {
+  id: string;
+  label: string | null;
+  sectionType: string;
+  repeatCount: number;
+  clickableCount: number;
+  keyActions: string[];
+  selector: string;
+  domPath: string;
+  ocrLabel: string;
+};
+
+type AdvancedClickableRow = {
+  id: string;
+  label: string | null;
+  actionType: string;
+  selector: string;
+  domPath: string;
+  ocrLabel: string;
+};
+
+function toRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" ? (value as JsonRecord) : {};
+}
+
+function toStringValue(value: unknown, fallback = "-") {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function toNumberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
 
 export default function ProjectDetail() {
   const { id } = useParams();
   const router = useRouter();
-  const [project, setProject] = useState<any>(null);
+  const [project, setProject] = useState<ProjectDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeStatus, setAnalyzeStatus] = useState<string | null>(null);
@@ -42,10 +200,6 @@ export default function ProjectDetail() {
   };
 
   useEffect(() => {
-    fetchProject();
-  }, [id]);
-
-  useEffect(() => {
     if (!analyzing || !analyzeStartedAt) return;
     const timer = setInterval(() => {
       setAnalyzeElapsedSec(Math.max(0, Math.floor((Date.now() - analyzeStartedAt) / 1000)));
@@ -53,26 +207,25 @@ export default function ProjectDetail() {
     return () => clearInterval(timer);
   }, [analyzing, analyzeStartedAt]);
 
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as ProjectDetailData;
         setProject(data);
         setSelectedPageId((prev) => prev || data?.pages?.[0]?.id || null);
         setSelectedSitemapNodeId((prev) => prev || data?.pages?.[0]?.id || null);
         const sitemapRes = await fetch(`/api/projects/${id}/sitemap`);
         if (sitemapRes.ok) {
           const sitemapData = await sitemapRes.json();
-          const nodes = Array.isArray(sitemapData?.sitemap?.nodes) ? sitemapData.sitemap.nodes : [];
+          const nodes: SitemapNode[] = Array.isArray(sitemapData?.sitemap?.nodes) ? sitemapData.sitemap.nodes : [];
+          const edges: SitemapEdge[] = Array.isArray(sitemapData?.sitemap?.edges) ? sitemapData.sitemap.edges : [];
           setSitemapState({
             source: sitemapData?.source === "override" ? "override" : "auto",
             nodes,
-            edges: Array.isArray(sitemapData?.sitemap?.edges) ? sitemapData.sitemap.edges : [],
+            edges,
           });
-          if (!selectedSitemapNodeId && nodes.length > 0) {
-            setSelectedSitemapNodeId(nodes[0].id);
-          }
+          setSelectedSitemapNodeId((prev) => prev || nodes[0]?.id || null);
         }
       }
     } catch (error) {
@@ -80,7 +233,11 @@ export default function ProjectDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchProject();
+  }, [fetchProject]);
 
   const startAnalysis = async () => {
     setAnalyzing(true);
@@ -177,15 +334,15 @@ export default function ProjectDetail() {
   };
 
   const selectedPage =
-    project?.pages?.find((page: any) => page.id === selectedPageId) ??
+    project?.pages?.find((page) => page.id === selectedPageId) ??
     (selectedSitemapNodeId
-      ? (project?.pages?.find((page: any) => page.id === selectedSitemapNodeId) ?? null)
+      ? (project?.pages?.find((page) => page.id === selectedSitemapNodeId) ?? null)
       : (project?.pages?.[0] ?? null));
   const selectedComponent =
-    selectedPage?.components?.find((comp: any) => comp.id === selectedComponentId) || null;
+    selectedPage?.components?.find((comp) => comp.id === selectedComponentId) || null;
 
   const eventCountByPage = new Map<string, number>();
-  (project?.events || []).forEach((event: any) => {
+  (project?.events || []).forEach((event) => {
     const key = event.pageId || "none";
     eventCountByPage.set(key, (eventCountByPage.get(key) || 0) + 1);
   });
@@ -429,13 +586,13 @@ export default function ProjectDetail() {
 
   const uniqueSitemapEdges = Array.from(
     new Map(
-      sitemapEdges.map((edge: any) => [`${edge.fromPageId}->${edge.toPageId}`, edge])
+      sitemapEdges.map((edge) => [`${edge.fromPageId}->${edge.toPageId}`, edge])
     ).values()
   );
 
-  const sitemapNodes: Array<{ id: string; url: string; title: string }> = sitemapState?.nodes?.length
+  const sitemapNodes: SitemapNode[] = sitemapState?.nodes?.length
     ? sitemapState.nodes
-    : (project?.pages || []).map((page: any) => ({ id: page.id, url: page.url, title: page.title || "Untitled" }));
+    : (project?.pages || []).map((page) => ({ id: page.id, url: page.url, title: page.title || "Untitled" }));
 
   const selectedSitemapNode =
     sitemapNodes.find((node: { id: string }) => node.id === selectedSitemapNodeId) || sitemapNodes[0] || null;
@@ -443,8 +600,8 @@ export default function ProjectDetail() {
   const nodeById = new Map(sitemapNodes.map((node) => [node.id, node]));
   const indegree = new Map<string, number>();
   const outByFrom = new Map<string, string[]>();
-  sitemapNodes.forEach((node: any) => indegree.set(node.id, 0));
-  uniqueSitemapEdges.forEach((edge: any) => {
+  sitemapNodes.forEach((node) => indegree.set(node.id, 0));
+  uniqueSitemapEdges.forEach((edge) => {
     indegree.set(edge.toPageId, (indegree.get(edge.toPageId) || 0) + 1);
     const list = outByFrom.get(edge.fromPageId) || [];
     list.push(edge.toPageId);
@@ -452,8 +609,8 @@ export default function ProjectDetail() {
   });
 
   const roots = sitemapNodes
-    .filter((node: any) => (indegree.get(node.id) || 0) === 0)
-    .map((node: any) => node.id);
+    .filter((node) => (indegree.get(node.id) || 0) === 0)
+    .map((node) => node.id);
 
   const getAnalyzeButtonLabel = () => {
     const prefix = "구조 분석";
@@ -488,9 +645,9 @@ export default function ProjectDetail() {
 
   const previewUrl = selectedSitemapNode?.url || selectedPage?.url || project.targetUrl;
   const selectedPageEvents = selectedPage
-    ? (project?.events || []).filter((event: any) => event.pageId === selectedPage.id)
+    ? (project?.events || []).filter((event) => event.pageId === selectedPage.id)
     : [];
-  const analyzeSnapshot = project?.analyzeSnapshot || {};
+  const analyzeSnapshot: AnalyzeSnapshot = project?.analyzeSnapshot || {};
   const aiInterpretation = analyzeSnapshot?.ai_interpretation || null;
   const llmUsage = aiInterpretation?.llmUsage || null;
   const pageClassificationList = Array.isArray(analyzeSnapshot?.page_classification)
@@ -512,17 +669,17 @@ export default function ProjectDetail() {
     ? analyzeSnapshot.core_user_flows
     : [];
   const selectedPageClassification =
-    pageClassificationList.find((item: any) => item.pageId === selectedPage?.id) || null;
+    pageClassificationList.find((item) => item.pageId === selectedPage?.id) || null;
   const selectedPageSectionStructure =
-    sectionStructureList.find((item: any) => item.pageId === selectedPage?.id) || null;
+    sectionStructureList.find((item) => item.pageId === selectedPage?.id) || null;
   const selectedPageSectionMap =
-    pageSectionMapList.find((item: any) => item.pageId === selectedPage?.id) || null;
+    pageSectionMapList.find((item) => item.pageId === selectedPage?.id) || null;
   const keySections = (selectedPageSectionStructure?.sections || []).slice(0, 7);
   const orderedSections = (selectedPageSectionMap?.sections || []).slice(0, 8);
-  const pageTypeById = new Map(pageClassificationList.map((item: any) => [item.pageId, item.pageType || "other"]));
+  const pageTypeById = new Map(pageClassificationList.map((item) => [item.pageId, item.pageType || "other"]));
   const treeChildrenByParent = new Map<string, string[]>();
   const parentByChild = new Map<string, string>();
-  uniqueSitemapEdges.forEach((edge: any) => {
+  uniqueSitemapEdges.forEach((edge) => {
     const list = treeChildrenByParent.get(edge.fromPageId) || [];
     list.push(edge.toPageId);
     treeChildrenByParent.set(edge.fromPageId, Array.from(new Set(list)));
@@ -576,7 +733,7 @@ export default function ProjectDetail() {
     parentByChild.set(node.id, parentId);
   });
 
-  const buildMenuTree = (nodeId: string, depth = 0, seen = new Set<string>()): any => {
+  const buildMenuTree = (nodeId: string, depth = 0, seen = new Set<string>()): MenuTreeNode | null => {
     if (depth > 12 || seen.has(nodeId)) return null;
     const node = nodeById.get(nodeId);
     if (!node) return null;
@@ -595,7 +752,7 @@ export default function ProjectDetail() {
       pageType: pageTypeById.get(node.id) || "other",
       children: childIds
         .map((childId) => buildMenuTree(childId, depth + 1, nextSeen))
-        .filter((child): child is any => Boolean(child)),
+        .filter((child): child is MenuTreeNode => Boolean(child)),
     };
   };
 
@@ -603,7 +760,8 @@ export default function ProjectDetail() {
     ? [menuRootId]
     : sitemapNodes.filter((node) => !parentByChild.has(node.id)).map((node) => node.id);
 
-  const getPathname = (url: string) => {
+  const getPathname = (url: string | null | undefined) => {
+    if (!url) return "/";
     try {
       return new URL(url).pathname || "/";
     } catch {
@@ -611,7 +769,7 @@ export default function ProjectDetail() {
     }
   };
 
-  const getFirstSegment = (url: string) => {
+  const getFirstSegment = (url: string | null | undefined) => {
     const path = getPathname(url);
     const seg = path.split("/").filter(Boolean)[0] || "";
     return seg.toLowerCase();
@@ -619,19 +777,20 @@ export default function ProjectDetail() {
 
   const toSegmentLabel = (segment: string) => decodeURIComponent(segment).replace(/[-_]+/g, " ");
 
-  const addTopLevelGroups = (tree: any) => {
+  const addTopLevelGroups = (tree: MenuTreeNode) => {
     if (!tree || !Array.isArray(tree.children) || tree.children.length <= 2) return tree;
     const treeOrigin = (() => {
+      if (!tree.url) return "";
       try {
         return new URL(tree.url).origin;
       } catch {
         return "";
       }
     })();
-    const grouped = new Map<string, any[]>();
-    const passthrough: any[] = [];
+    const grouped = new Map<string, MenuTreeNode[]>();
+    const passthrough: MenuTreeNode[] = [];
 
-    tree.children.forEach((child: any) => {
+    tree.children.forEach((child) => {
       const seg = getFirstSegment(child.url || "");
       if (!seg) {
         passthrough.push(child);
@@ -642,7 +801,7 @@ export default function ProjectDetail() {
       grouped.set(seg, list);
     });
 
-    const merged: any[] = [...passthrough];
+    const merged: MenuTreeNode[] = [...passthrough];
     grouped.forEach((children, segment) => {
       if (children.length < 2) {
         merged.push(...children);
@@ -664,7 +823,7 @@ export default function ProjectDetail() {
 
   const menuTreesFallback = menuRootIds
     .map((rootId) => buildMenuTree(rootId))
-    .filter((tree): tree is any => Boolean(tree))
+    .filter((tree): tree is MenuTreeNode => Boolean(tree))
     .map((tree) => addTopLevelGroups(tree));
   const menuTrees = parsedMenuTrees.length > 0 ? parsedMenuTrees : menuTreesFallback;
   const menuSectionsForView =
@@ -686,11 +845,11 @@ export default function ProjectDetail() {
     return new Set(["main", "plp", "pdp", "detail", "form"]);
   })();
 
-  const toMenuLabel = (node: { title: string; url: string; pageType: string }) => {
+  const toMenuLabel = (node: { title: string; url: string | null; pageType: string }) => {
     const title = String(node.title || "").trim();
     if (title && title.toLowerCase() !== "untitled") return title;
     try {
-      const path = new URL(node.url).pathname;
+      const path = getPathname(node.url);
       if (path === "/") return "home";
       const seg = path.split("/").filter(Boolean).pop() || "page";
       return decodeURIComponent(seg).replace(/[-_]+/g, " ");
@@ -713,21 +872,21 @@ export default function ProjectDetail() {
     }
   };
 
-  const resolveNodePage = (node: any) => {
-    const byId = (project.pages || []).find((p: any) => p.id === node.id);
+  const resolveNodePage = (node: MenuTreeNode | SitemapNode) => {
+    const byId = (project.pages || []).find((p) => p.id === node.id);
     if (byId) return byId;
     const nodeUrl = normalizeMatchUrl(node.url);
-    return (project.pages || []).find((p: any) => normalizeMatchUrl(p.url) === nodeUrl) || null;
+    return (project.pages || []).find((p) => normalizeMatchUrl(p.url) === nodeUrl) || null;
   };
 
-  const isUtilityNode = (node: any) => {
+  const isUtilityNode = (node: MenuTreeNode) => {
     const text = `${node?.title || ""} ${node?.url || ""}`.toLowerCase();
     return /(login|sign.?in|signin|like|wishlist|favorite|order|orders|cart|mypage|my|계정|로그인|좋아요|주문|장바구니|마이)/i.test(text);
   };
 
-  const dedupeNodesByUrl = (nodes: any[]) => {
+  const dedupeNodesByUrl = (nodes: MenuTreeNode[]) => {
     const seen = new Set<string>();
-    const out: any[] = [];
+    const out: MenuTreeNode[] = [];
     nodes.forEach((node) => {
       const key = `${normalizeMatchUrl(node?.url)}::${String(node?.title || "").toLowerCase()}`;
       if (seen.has(key)) return;
@@ -744,7 +903,7 @@ export default function ProjectDetail() {
     menu_other: "Other Menu",
   };
   const normalizedSectionRoots = menuSectionsForView
-    .map((section: any) => {
+    .map((section) => {
       const deduped = dedupeNodesByUrl(section.trees || []);
       const utility = deduped.filter((node) => isUtilityNode(node));
       const primary = deduped.filter((node) => !isUtilityNode(node));
@@ -755,26 +914,21 @@ export default function ProjectDetail() {
         primary,
       };
     })
-    .filter((section: any) => section.utility.length > 0 || section.primary.length > 0);
+    .filter((section) => section.utility.length > 0 || section.primary.length > 0);
 
   const hasMultipleSectionGroups = normalizedSectionRoots.length > 1;
-  const directTopNavRoots = dedupeNodesByUrl(
-    normalizedSectionRoots
-      .filter((section: any) => section.sectionType === "top_nav")
-      .flatMap((section: any) => section.primary)
-  );
   const singleSectionPrimaryRoots = dedupeNodesByUrl(
-    normalizedSectionRoots.flatMap((section: any) => section.primary)
+    normalizedSectionRoots.flatMap((section) => section.primary)
   );
-  const allUtilityRoots = dedupeNodesByUrl(normalizedSectionRoots.flatMap((section: any) => section.utility)).map(
-    (node: any) => ({
+  const allUtilityRoots = dedupeNodesByUrl(normalizedSectionRoots.flatMap((section) => section.utility)).map(
+    (node) => ({
       ...node,
       pageType: node.pageType || "utility",
     })
   );
 
   const sectionGroupNodes = normalizedSectionRoots
-    .map((section: any) => ({
+    .map((section) => ({
       id: `virtual:menu-section:${section.sectionType}`,
       title: sectionTitleByType[section.sectionType] || section.title || "Menu Group",
       url: null,
@@ -782,7 +936,7 @@ export default function ProjectDetail() {
       virtual: true,
       children: dedupeNodesByUrl(section.primary),
     }))
-    .filter((group: any) => (group.children || []).length > 0);
+    .filter((group) => (group.children || []).length > 0);
   const utilityGroupNode =
     allUtilityRoots.length > 0
       ? {
@@ -807,10 +961,10 @@ export default function ProjectDetail() {
   };
 
   const primaryMenuNodes = hasMultipleSectionGroups
-    ? sectionGroupNodes.flatMap((group: any) => group.children || [])
+    ? sectionGroupNodes.flatMap((group) => group.children || [])
     : singleSectionPrimaryRoots;
 
-  const renderMenuTree = (node: any, depth = 0, lineage = "root"): any => {
+  const renderMenuTree = (node: MenuTreeNode, depth = 0, lineage = "root") => {
     const resolvedPage = resolveNodePage(node);
     const isSelected = Boolean(resolvedPage && selectedPage?.id === resolvedPage.id);
     const isFocused = focusedPageTypes.has(node.pageType);
@@ -868,7 +1022,7 @@ export default function ProjectDetail() {
           <div style={{ color: "var(--text-secondary)", fontSize: "0.72rem" }}>
             {node.pageType} · {(() => {
               try {
-                return new URL(node.url).pathname || "/";
+                return getPathname(node.url);
               } catch {
                 return node.url || "/";
               }
@@ -888,7 +1042,7 @@ export default function ProjectDetail() {
               alignItems: "flex-start",
             }}
           >
-            {(node.children || []).map((child: any, childIndex: number) =>
+            {(node.children || []).map((child, childIndex: number) =>
               renderMenuTree(child, depth + 1, `${lineage}.${childIndex}`)
             )}
           </div>
@@ -901,7 +1055,7 @@ export default function ProjectDetail() {
     .map((node) => {
       const page = resolveNodePage(node);
       if (!page) return null;
-      const pageMap = pageSectionMapList.find((item: any) => item.pageId === page.id);
+      const pageMap = pageSectionMapList.find((item) => item.pageId === page.id);
       return {
         id: page.id,
         title: page.title || toMenuLabel(node),
@@ -909,38 +1063,39 @@ export default function ProjectDetail() {
         sections: (pageMap?.sections || []).slice(0, 3),
       };
     })
-    .filter((item): item is any => Boolean(item))
+    .filter((item): item is MappedMenuPage => Boolean(item))
     .filter((item, index, arr) => arr.findIndex((candidate) => candidate.id === item.id) === index)
     .slice(0, 10);
   const recommendedEvents = selectedPageEvents.slice(0, 10);
   const selectedPageComponents = selectedPage?.components || [];
   const advancedSectionRows = selectedPageComponents
-    .filter((component: any) => component.componentType === "info_block")
-    .map((component: any) => {
-      const meta = parseJson<any>(component.metadataJson, {});
-      const actionMap = meta?.interactionSummary?.actions || {};
+    .filter((component) => component.componentType === "info_block")
+    .map((component): AdvancedStructureRow => {
+      const meta = parseJson<JsonRecord>(component.metadataJson, {});
+      const interactionSummary = toRecord(meta.interactionSummary);
+      const actionMap = toRecord(interactionSummary.actions);
       return {
         id: component.id,
         label: component.label,
-        sectionType: meta.blockKind || "content_section",
-        repeatCount: Number(meta.linkCount || 0) + Number(meta.buttonCount || 0),
-        clickableCount: Number(meta?.interactionSummary?.total || 0),
+        sectionType: toStringValue(meta.blockKind, "content_section"),
+        repeatCount: toNumberValue(meta.linkCount) + toNumberValue(meta.buttonCount),
+        clickableCount: toNumberValue(interactionSummary.total),
         keyActions: Object.keys(actionMap).slice(0, 5),
         selector: component.selector || "-",
-        domPath: meta?.nearestSemanticAncestor || "-",
-        ocrLabel: meta?.semanticTitle || "-",
+        domPath: toStringValue(meta.nearestSemanticAncestor),
+        ocrLabel: toStringValue(meta.semanticTitle),
       };
     });
   const advancedClickableRows = selectedPageComponents
-    .filter((component: any) => component.componentType === "interaction")
-    .map((component: any) => {
-      const meta = parseJson<any>(component.metadataJson, {});
+    .filter((component) => component.componentType === "interaction")
+    .map((component): AdvancedClickableRow => {
+      const meta = parseJson<JsonRecord>(component.metadataJson, {});
       return {
         id: component.id,
         label: component.label,
-        actionType: meta.actionType || "trigger_ui",
+        actionType: toStringValue(meta.actionType, "trigger_ui"),
         selector: component.selector || "-",
-        domPath: meta.ownerBlockLabel || "-",
+        domPath: toStringValue(meta.ownerBlockLabel),
         ocrLabel: component.label || "-",
       };
     });
@@ -1199,7 +1354,7 @@ export default function ProjectDetail() {
                     style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
                   >
                     <option value="">from page</option>
-                    {sitemapNodes.map((node: any) => (
+                    {sitemapNodes.map((node) => (
                       <option key={`from-${node.id}`} value={node.id}>{node.title}</option>
                     ))}
                   </select>
@@ -1209,7 +1364,7 @@ export default function ProjectDetail() {
                     style={{ background: "rgba(0,0,0,0.3)", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "0.5rem" }}
                   >
                     <option value="">to page</option>
-                    {sitemapNodes.map((node: any) => (
+                    {sitemapNodes.map((node) => (
                       <option key={`to-${node.id}`} value={node.id}>{node.title}</option>
                     ))}
                   </select>
@@ -1237,9 +1392,9 @@ export default function ProjectDetail() {
                 <div style={{ marginTop: "0.7rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
                   {sitemapState?.edges.map((edge, index) => (
                     <div key={`${edge.fromPageId}-${edge.toPageId}-${index}`} style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", padding: "0.35rem 0.55rem", border: "1px solid var(--border-color)", borderRadius: "999px", fontSize: "0.75rem", color: "#fff" }}>
-                      <span>{sitemapNodes.find((p: any) => p.id === edge.fromPageId)?.title || "from"}</span>
+                      <span>{sitemapNodes.find((p) => p.id === edge.fromPageId)?.title || "from"}</span>
                       <span style={{ color: "var(--text-secondary)" }}>→</span>
-                      <span>{sitemapNodes.find((p: any) => p.id === edge.toPageId)?.title || "to"}</span>
+                      <span>{sitemapNodes.find((p) => p.id === edge.toPageId)?.title || "to"}</span>
                       <button onClick={() => removeSitemapEdge(edge.fromPageId, edge.toPageId)} style={{ marginLeft: "0.2rem", background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontSize: "0.8rem" }}>
                         x
                       </button>
@@ -1247,7 +1402,7 @@ export default function ProjectDetail() {
                   ))}
                 </div>
                 <div style={{ marginTop: "0.6rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
-                  {sitemapNodes.map((node: any) => (
+                  {sitemapNodes.map((node) => (
                     <div key={`node-${node.id}`} style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", padding: "0.35rem 0.55rem", border: "1px solid var(--border-color)", borderRadius: "999px", fontSize: "0.75rem", color: "#fff" }}>
                       <span>{node.title}</span>
                       {String(node.id).startsWith("custom_") && (
@@ -1278,7 +1433,7 @@ export default function ProjectDetail() {
                       <div style={{ marginTop: "0.8rem", borderTop: "1px dashed var(--border-color)", paddingTop: "0.6rem" }}>
                         <div style={{ color: "#fff", fontSize: "0.8rem", marginBottom: "0.4rem" }}>메뉴 섹션 구성</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                          {menuSectionsForView.map((section: any, idx: number) => (
+                          {menuSectionsForView.map((section, idx: number) => (
                             <span
                               key={`menu-sect-chip-${section.sectionType || idx}`}
                               style={{ fontSize: "0.72rem", color: "#d1d5db", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.2rem 0.5rem" }}
@@ -1307,7 +1462,7 @@ export default function ProjectDetail() {
                     <div style={{ color: "#fff", fontSize: "0.85rem", marginBottom: "0.35rem" }}>해당 페이지 이벤트</div>
                     {selectedPageEvents.length > 0 ? (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                        {selectedPageEvents.slice(0, 8).map((event: any) => (
+                        {selectedPageEvents.slice(0, 8).map((event) => (
                           <span key={event.id} style={{ fontSize: "0.73rem", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.2rem 0.45rem" }}>
                             {event.eventName}
                           </span>
@@ -1323,12 +1478,12 @@ export default function ProjectDetail() {
                     <div style={{ color: "#fff", fontSize: "0.83rem", marginBottom: "0.35rem" }}>메뉴 매핑 주요 페이지</div>
                     {mappedMenuPages.length > 0 ? (
                       <div style={{ display: "grid", gap: "0.38rem" }}>
-                        {mappedMenuPages.map((page: any) => (
+                        {mappedMenuPages.map((page) => (
                           <div key={`mapped-page-${page.id}`} style={{ border: "1px solid var(--border-color)", borderRadius: "8px", padding: "0.42rem 0.48rem" }}>
                             <div style={{ color: "#fff", fontSize: "0.76rem", marginBottom: "0.2rem" }}>{page.title}</div>
                             <div style={{ color: "var(--text-secondary)", fontSize: "0.7rem", marginBottom: "0.25rem", wordBreak: "break-all" }}>{page.url}</div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
-                              {(page.sections || []).map((section: any, idx: number) => (
+                              {(page.sections || []).map((section, idx: number) => (
                                 <span key={`mapped-sec-${page.id}-${idx}`} style={{ fontSize: "0.66rem", color: "#d1d5db", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.15rem 0.4rem" }}>
                                   {section.sectionType}
                                 </span>
@@ -1354,7 +1509,7 @@ export default function ProjectDetail() {
             <div className="glass-panel" style={{ padding: '1rem' }}>
               <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>Pages</h3>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {project.pages.map((page: any) => (
+                {project.pages.map((page) => (
                   <li key={page.id}>
                     <button
                       type="button"
@@ -1392,11 +1547,11 @@ export default function ProjectDetail() {
                 <div style={{ color: "#fff", fontSize: "0.92rem", marginBottom: "0.45rem" }}>대표 사용자 흐름</div>
                 {coreUserFlows.length > 0 ? (
                   <div style={{ display: "grid", gap: "0.45rem" }}>
-                    {coreUserFlows.slice(0, 4).map((flow: any) => (
+                    {coreUserFlows.slice(0, 4).map((flow) => (
                       <div key={flow.flowId} style={{ border: "1px solid var(--border-color)", borderRadius: "8px", padding: "0.5rem" }}>
                         <div style={{ color: "#fff", fontSize: "0.8rem", marginBottom: "0.2rem" }}>{flow.flowType}</div>
                         <div style={{ color: "var(--text-secondary)", fontSize: "0.76rem", wordBreak: "break-word" }}>
-                          {(flow.pages || []).map((page: any) => page.pageType || "other").join(" -> ") || "-"}
+                          {(flow.pages || []).map((page) => page.pageType || "other").join(" -> ") || "-"}
                         </div>
                       </div>
                     ))}
@@ -1429,7 +1584,7 @@ export default function ProjectDetail() {
                 <div style={{ color: "#fff", fontSize: "0.92rem", marginBottom: "0.45rem" }}>페이지 섹션 순서</div>
                 {(orderedSections.length > 0 || keySections.length > 0) ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.5rem" }}>
-                    {(orderedSections.length > 0 ? orderedSections : keySections.slice(0, 7)).map((section: any, idx: number) => (
+                    {(orderedSections.length > 0 ? orderedSections : keySections.slice(0, 7)).map((section, idx: number) => (
                       <div key={`key-sec-${idx}`} style={{ border: "1px solid var(--border-color)", borderRadius: "8px", padding: "0.55rem" }}>
                         <div style={{ color: "#fff", fontSize: "0.86rem" }}>
                           {section.order ? `${section.order}. ` : `${idx + 1}. `}
@@ -1450,7 +1605,7 @@ export default function ProjectDetail() {
                 <div style={{ color: "#fff", fontSize: "0.92rem", marginBottom: "0.45rem" }}>추천 이벤트</div>
                 {recommendedEvents.length > 0 ? (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                    {recommendedEvents.map((event: any) => (
+                    {recommendedEvents.map((event) => (
                       <span key={event.id} style={{ fontSize: "0.74rem", color: "#fff", border: "1px solid var(--border-color)", borderRadius: "999px", padding: "0.22rem 0.5rem" }}>
                         {event.eventName}
                       </span>
@@ -1477,7 +1632,7 @@ export default function ProjectDetail() {
                     <div style={{ color: "#fff", fontSize: "0.86rem", marginBottom: "0.45rem" }}>섹션 내부 구성요소</div>
                     {advancedSectionRows.length > 0 ? (
                       <div style={{ display: "grid", gap: "0.45rem" }}>
-                        {advancedSectionRows.map((row: any) => (
+                        {advancedSectionRows.map((row) => (
                           <button
                             key={row.id}
                             type="button"
@@ -1503,7 +1658,7 @@ export default function ProjectDetail() {
                     <div style={{ color: "#fff", fontSize: "0.86rem", marginBottom: "0.45rem" }}>클릭 가능한 요소</div>
                     {advancedClickableRows.length > 0 ? (
                       <div style={{ display: "grid", gap: "0.4rem" }}>
-                        {advancedClickableRows.slice(0, 40).map((row: any) => (
+                        {advancedClickableRows.slice(0, 40).map((row) => (
                           <button
                             key={row.id}
                             type="button"

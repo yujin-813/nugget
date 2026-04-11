@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/constants";
 
 export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/login") ||
@@ -25,7 +25,7 @@ export function proxy(request: NextRequest) {
 
   const nextUrl = request.nextUrl.clone();
   nextUrl.pathname = "/login";
-  nextUrl.searchParams.set("next", pathname);
+  nextUrl.searchParams.set("next", `${pathname}${search}`);
   return NextResponse.redirect(nextUrl);
 }
 

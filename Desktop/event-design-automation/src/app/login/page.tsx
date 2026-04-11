@@ -1,4 +1,20 @@
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    next?: string;
+  }>;
+};
+
+function sanitizeNextPath(raw: string | undefined) {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const nextPath = sanitizeNextPath(resolvedSearchParams?.next);
+  const loginHref = nextPath ? `/api/auth/google?next=${encodeURIComponent(nextPath)}` : "/api/auth/google";
+
   return (
     <div className="glass-panel" style={{ padding: "2.5rem", width: "420px", textAlign: "center" }}>
       <h1 style={{ color: "#fff", marginBottom: "0.75rem" }}>EventDesign.ai</h1>
@@ -6,7 +22,7 @@ export default function LoginPage() {
         Google 계정으로 로그인하고 워크스페이스를 시작하세요.
       </p>
       <a
-        href="/api/auth/google"
+        href={loginHref}
         style={{
           display: "inline-flex",
           alignItems: "center",

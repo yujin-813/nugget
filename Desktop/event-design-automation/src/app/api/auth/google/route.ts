@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
+function sanitizeNextPath(raw: string | null) {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
 function buildRedirectUri(request: Request) {
   const explicitBase = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
   if (explicitBase) {
@@ -11,11 +17,13 @@ function buildRedirectUri(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json({ error: "Missing GOOGLE_CLIENT_ID" }, { status: 500 });
   }
 
+  const url = new URL(request.url);
+  const nextPath = sanitizeNextPath(url.searchParams.get("next"));
   const state = crypto.randomBytes(16).toString("hex");
   const redirectUri = buildRedirectUri(request);
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -35,5 +43,16 @@ export async function GET(request: Request) {
     maxAge: 10 * 60,
     path: "/",
   });
+  if (nextPath) {
+    response.cookies.set("oauth_next", nextPath, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 10 * 60,
+      path: "/",
+    });
+  } else {
+    response.cookies.delete("oauth_next");
+  }
   return response;
 }

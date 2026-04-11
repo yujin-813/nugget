@@ -12,9 +12,16 @@ export async function PUT(
     const access = await requireEventAccess(eventId, { write: true });
     if (access instanceof NextResponse) return access;
     const body = await request.json();
-    
+
     // allow partial updates
-    const updateData: any = {};
+    const updateData: {
+      eventName?: string;
+      description?: string | null;
+      triggerType?: string | null;
+      triggerCondition?: string | null;
+      status?: string;
+      priority?: string | null;
+    } = {};
     if (body.eventName !== undefined) updateData.eventName = body.eventName;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.triggerType !== undefined) updateData.triggerType = body.triggerType;

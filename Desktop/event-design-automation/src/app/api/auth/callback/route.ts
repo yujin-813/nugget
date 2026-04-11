@@ -5,6 +5,12 @@ import { createSession, ensureDefaultWorkspace } from "@/lib/auth";
 import { SESSION_COOKIE } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 
+function sanitizeNextPath(raw: string | null) {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
 function buildRedirectUri(request: Request) {
   const explicitBase = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
   if (explicitBase) {
@@ -18,15 +24,17 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const storedState = (await cookies()).get("oauth_state")?.value;
+  const cookieStore = await cookies();
+  const storedState = cookieStore.get("oauth_state")?.value;
+  const nextPath = sanitizeNextPath(cookieStore.get("oauth_next")?.value ?? null);
   const baseUrl = process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || url.origin;
 
   if (!code || !state || !storedState || state !== storedState) {
     return NextResponse.redirect(new URL("/login?error=oauth_state", baseUrl));
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(new URL("/login?error=oauth_config", baseUrl));
   }
@@ -84,7 +92,7 @@ export async function GET(request: Request) {
   });
 
   const session = await createSession(user.id);
-  const response = NextResponse.redirect(new URL("/projects", baseUrl));
+  const response = NextResponse.redirect(new URL(nextPath || "/projects", baseUrl));
   response.cookies.set(SESSION_COOKIE, session.token, {
     httpOnly: true,
     sameSite: "lax",
@@ -93,5 +101,6 @@ export async function GET(request: Request) {
     path: "/",
   });
   response.cookies.delete("oauth_state");
+  response.cookies.delete("oauth_next");
   return response;
 }

@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer";
 import type { Page } from "puppeteer";
-import type { Element as DomHandlerElement } from "domhandler";
+import type { Element as DomHandlerElement, ParentNode as DomHandlerParentNode } from "domhandler";
 
 type ComponentDraft = {
   pageId: string;
@@ -432,6 +432,9 @@ async function extractInternalLinksByClicks(
   return Array.from(discovered).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
 
+// Reserved for future interactive crawl passes.
+void extractInternalLinksByClicks;
+
 async function extractInternalLinksFromHamburgerMenu(
   page: Page,
   pageUrl: string,
@@ -495,6 +498,9 @@ async function extractInternalLinksFromHamburgerMenu(
 
   return Array.from(discovered).slice(0, MAX_DISCOVER_LINKS_PER_PAGE);
 }
+
+// Reserved for future interactive crawl passes.
+void extractInternalLinksFromHamburgerMenu;
 
 function parseUrlStructure(rawUrl: string) {
   try {
@@ -1145,7 +1151,7 @@ function normalizeForKey(input: string) {
 
 function getNodeDepth(el: DomHandlerElement | null | undefined) {
   let depth = 0;
-  let current: any = el;
+  let current: DomHandlerElement | DomHandlerParentNode | null | undefined = el;
   while (current?.parent) {
     depth += 1;
     current = current.parent;
@@ -1154,7 +1160,8 @@ function getNodeDepth(el: DomHandlerElement | null | undefined) {
 }
 
 function isAncestorNode(ancestor: DomHandlerElement, node: DomHandlerElement) {
-  let current: any = node?.parent;
+  let current: DomHandlerElement | DomHandlerParentNode | null | undefined =
+    node.parent as DomHandlerElement | DomHandlerParentNode | null | undefined;
   while (current) {
     if (current === ancestor) return true;
     current = current.parent;
@@ -1510,7 +1517,7 @@ async function neutralizeBlockingPopups(page: Page) {
         } catch {}
       };
 
-      const getText = (el: any) =>
+      const getText = (el: Element) =>
         `${el.textContent || ""} ${(el.getAttribute("aria-label") || "")}`.toLowerCase();
 
       const closeCandidates = Array.from(
@@ -1625,7 +1632,7 @@ async function runAnalyzePipeline(
     const parsed = new URL(normalizedTargetUrl);
     origin = parsed.origin;
     serviceDomain = getServiceDomain(parsed.hostname);
-  } catch (error) {
+  } catch {
     throw new Error(`Invalid target URL for analyze: ${normalizedTargetUrl}`);
   }
 
@@ -2527,7 +2534,12 @@ async function runAnalyzePipeline(
     const summary = [...orderedInfoBlocks]
       .sort((a, b) => b.weight - a.weight)
       .slice(0, 8)
-      .map(({ weight, order, ...rest }) => rest as SectionSummary);
+      .map((item) => {
+        const { weight: _weight, order: _order, ...rest } = item;
+        void _weight;
+        void _order;
+        return rest as SectionSummary;
+      });
 
     return {
       pageId: page.id,

@@ -6,6 +6,7 @@ APP_ROOT="/srv/eve-event-app"
 CURRENT_DIR="${APP_ROOT}/current"
 ENV_FILE="${APP_ROOT}/.env.eve"
 ECOSYSTEM_FILE="${CURRENT_DIR}/deploy/ecosystem.eve.config.cjs"
+BACKUP_SCRIPT="${CURRENT_DIR}/scripts/backup-sqlite.sh"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-eve-production}"
 DEPLOY_REMOTE="${DEPLOY_REMOTE:-origin}"
 
@@ -33,19 +34,35 @@ git pull --ff-only "${DEPLOY_REMOTE}" "${DEPLOY_BRANCH}"
 echo "[4/8] npm ci"
 npm ci
 
-echo "[5/8] prisma db push"
+echo "[5/9] prisma db push"
 set -a
 source "${ENV_FILE}"
 set +a
+
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  echo "[ERROR] DATABASE_URL is not set in ${ENV_FILE}"
+  exit 1
+fi
+
+if [[ "${DATABASE_URL}" == file:* ]]; then
+  DB_FILE_PATH="${DATABASE_URL#file:}"
+  echo "[backup] sqlite ${DB_FILE_PATH}"
+  bash "${BACKUP_SCRIPT}" "${DB_FILE_PATH}" "${APP_ROOT}/data/backups"
+fi
+
 npx prisma db push
 npx prisma generate
 
-echo "[6/8] next build"
+echo "[6/9] next build"
 npm run build
 
-echo "[7/8] pm2 restart"
+echo "[7/9] pm2 restart"
 pm2 start "${ECOSYSTEM_FILE}" --only "${APP_NAME}" --update-env
 pm2 save
 
-echo "[8/8] done"
+echo "[8/9] healthcheck"
+APP_PORT="${PORT:-3100}"
+curl -fsS "http://127.0.0.1:${APP_PORT}/login" >/dev/null
+
+echo "[9/9] done"
 pm2 status "${APP_NAME}"
